@@ -4,6 +4,11 @@ server:
 spring:
   application:
     name: rates-service
+  # API JSON is snake_case (§5); Java fields stay camelCase. Null fields (e.g. a BASE
+  # breakdown line's calc/rate_bps) are omitted.
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: non_null
   # DataSource is supplied by the environment (SPRING_DATASOURCE_URL / _USERNAME /
   # _PASSWORD) — see docker-compose.yml. No creds are hardcoded here.
   flyway:

@@ -35,8 +35,8 @@ seed:
 
 ## test: run each service's hello-world test suite.
 test:
-	@echo ">> rates-service (maven)"
-	cd services/rates && mvn -B -q test
+	@echo ">> rates-service (maven: unit + Testcontainers ITs)"
+	cd services/rates && mvn -B -q verify
 	@echo ">> booking-service (vitest)"
 	cd services/booking && pnpm install --frozen-lockfile && pnpm test
 	@echo ">> agent-service (vitest)"

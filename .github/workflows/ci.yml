@@ -69,4 +69,6 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - run: mvn -B -q test
+      # `verify` runs Surefire unit tests AND Failsafe (*IT) integration tests, which
+      # spin up Postgres via Testcontainers (Docker is available on ubuntu runners).
+      - run: mvn -B -q verify
