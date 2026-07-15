@@ -1,0 +1,16 @@
+{
+  "name": "@freightpilot/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "spectral lint \"*.openapi.yaml\" --ruleset .spectral.yaml --fail-severity=warn",
+    "test:ruleset": "node scripts/ruleset-selftest.mjs"
+  },
+  "devDependencies": {
+    "@stoplight/spectral-cli": "^6.11.0"
+  }
+}

@@ -1,0 +1,28 @@
+# Deliberately-broken spec — the regression guard for our custom house-convention
+# rules (see scripts/ruleset-selftest.mjs). It is NOT under the `lint` glob
+# (*.openapi.yaml in the package root), so it never fails the real lint. If the
+# custom rules are weakened or removed, the self-test stops seeing these violations
+# and fails CI. Each operation below violates exactly the rules named in comments.
+openapi: 3.0.3
+info: { title: negative-fixture, version: 0.0.0, description: intentionally invalid }
+servers: [{ url: http://localhost }]
+paths:
+  /thing:
+    get:
+      operationId: getThing
+      summary: response omits X-Request-Id header
+      # violates freightpilot-responses-declare-request-id (200)
+      responses:
+        '200':
+          description: ok but no X-Request-Id header
+          content:
+            application/json:
+              schema: { type: object }
+        # violates freightpilot-error-responses-use-envelope (inline, not the shared ref)
+        # and freightpilot-responses-declare-request-id (no X-Request-Id header)
+        '404':
+          description: inline error, not the shared ErrorResponse
+          content:
+            application/json:
+              schema: { type: object }
+components: {}

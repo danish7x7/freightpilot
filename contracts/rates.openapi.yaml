@@ -66,6 +66,10 @@ components:
   responses:
     ErrorResponse:
       description: Uniform error envelope
+      headers:
+        X-Request-Id:
+          description: Correlation id, echoed from the request or minted if absent/invalid.
+          schema: { type: string }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -95,8 +99,8 @@ components:
       required: [weight_kg, description]
       properties:
         pallets: { type: integer, minimum: 1, maximum: 100 }
-        weight_kg: { type: number, exclusiveMinimum: 0, maximum: 30000 }
-        volume_cbm: { type: number, exclusiveMinimum: 0 }
+        weight_kg: { type: number, minimum: 0, exclusiveMinimum: true, maximum: 30000 }
+        volume_cbm: { type: number, minimum: 0, exclusiveMinimum: true }
         description: { type: string, maxLength: 500 }
     CalculateRequest:
       type: object
@@ -129,7 +133,7 @@ components:
       properties:
         component: { type: string, example: FUEL }
         calc: { $ref: '#/components/schemas/SurchargeCalc' }
-        rate_bps: { type: integer, nullable: true, description: basis points, present only when calc=PERCENT }
+        rate_bps: { type: integer, nullable: true, description: 'basis points, present only when calc=PERCENT' }
         amount_cents: { type: integer, format: int64 }
     QuoteResponse:
       type: object
