@@ -4,3 +4,11 @@ server:
 spring:
   application:
     name: rates-service
+  # DataSource is supplied by the environment (SPRING_DATASOURCE_URL / _USERNAME /
+  # _PASSWORD) — see docker-compose.yml. No creds are hardcoded here.
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Migrations run on startup; a failed migration fails startup, keeping the
+    # container unhealthy (readiness-for-free). Seed data is NOT here — it is
+    # applied separately by `make seed` (see db/seed/seed.sql).

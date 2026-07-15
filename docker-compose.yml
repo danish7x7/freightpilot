@@ -27,8 +27,11 @@ services:
     build: ./services/rates
     environment:
       SERVER_PORT: 8080
-      # Owns ONLY its own DB URL. No booking/agent creds here.
-      RATES_DATABASE_URL: postgres://rates:${RATES_DB_PASSWORD:-rates_dev}@rates-db:5432/rates
+      # Owns ONLY its own DB creds. No booking/agent creds here. Spring needs a
+      # JDBC URL (not the postgres:// URI form); Flyway inherits this datasource.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://rates-db:5432/rates
+      SPRING_DATASOURCE_USERNAME: rates
+      SPRING_DATASOURCE_PASSWORD: ${RATES_DB_PASSWORD:-rates_dev}
     depends_on:
       rates-db:
         condition: service_healthy
