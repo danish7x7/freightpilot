@@ -1,0 +1,141 @@
+# FreightPilot — L0 Foundation compose.
+# Three app services (each shallow /health only, no DB wiring yet) + one Postgres
+# per service. Each Postgres lives on its OWN db-only network reachable solely by
+# its owning service, so "each service owns its database" is enforced by routing,
+# not trust. nginx and the client are deferred to L3/L4 (see docs/MASTER_PLAN.md §3).
+name: freightpilot
+
+services:
+  # ---- rates-service (Java 21 / Spring Boot 3) ----------------------------
+  rates-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rates
+      POSTGRES_PASSWORD: ${RATES_DB_PASSWORD:-rates_dev}
+      POSTGRES_DB: rates
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rates -d rates"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # On an internal-only network — not published to the host. Reach it with:
+    #   docker compose exec rates-db psql -U rates -d rates
+    networks: [rates_db_net]
+    volumes: [rates_db_data:/var/lib/postgresql/data]
+
+  rates-service:
+    build: ./services/rates
+    environment:
+      SERVER_PORT: 8080
+      # Owns ONLY its own DB URL. No booking/agent creds here.
+      RATES_DATABASE_URL: postgres://rates:${RATES_DB_PASSWORD:-rates_dev}@rates-db:5432/rates
+    depends_on:
+      rates-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 45s # Spring Boot cold start
+    networks: [backend, rates_db_net]
+    ports: ["8080:8080"]
+
+  # ---- booking-service (TS / Fastify) -------------------------------------
+  booking-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: ${BOOKING_DB_PASSWORD:-booking_dev}
+      POSTGRES_DB: booking
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking -d booking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Internal-only; reach with: docker compose exec booking-db psql -U booking -d booking
+    networks: [booking_db_net]
+    volumes: [booking_db_data:/var/lib/postgresql/data]
+
+  booking-service:
+    build: ./services/booking
+    environment:
+      PORT: 8081
+      BOOKING_DATABASE_URL: postgres://booking:${BOOKING_DB_PASSWORD:-booking_dev}@booking-db:5432/booking
+    depends_on:
+      booking-db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:'+(process.env.PORT||8081)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    networks: [backend, booking_db_net]
+    ports: ["8081:8081"]
+
+  # ---- agent-service (TS / Fastify) ---------------------------------------
+  agent-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: ${AGENT_DB_PASSWORD:-agent_dev}
+      POSTGRES_DB: agent
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Internal-only; reach with: docker compose exec agent-db psql -U agent -d agent
+    networks: [agent_db_net]
+    volumes: [agent_db_data:/var/lib/postgresql/data]
+
+  agent-service:
+    build: ./services/agent
+    environment:
+      PORT: 8082
+      # Owns ONLY the agent DB. Reaches rates/booking via REST — NEVER their DBs.
+      AGENT_DATABASE_URL: postgres://agent:${AGENT_DB_PASSWORD:-agent_dev}@agent-db:5432/agent
+      RATES_SERVICE_URL: http://rates-service:8080
+      BOOKING_SERVICE_URL: http://booking-service:8081
+    depends_on:
+      agent-db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:'+(process.env.PORT||8082)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    networks: [backend, agent_db_net]
+    ports: ["8082:8082"]
+
+networks:
+  # Inter-service REST plane. Agent will call rates/booking here (L5); no DB sits on it.
+  backend:
+  # DB-only planes: one per service, reachable solely by the owning service.
+  # internal:true removes external routing entirely (defense-in-depth on top of
+  # the fact that only the owning service is even attached to each).
+  rates_db_net:
+    internal: true
+  booking_db_net:
+    internal: true
+  agent_db_net:
+    internal: true
+
+volumes:
+  rates_db_data:
+  booking_db_data:
+  agent_db_data:

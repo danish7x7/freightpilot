@@ -1,0 +1,10 @@
+{
+  // Type-checks tests too (vitest transpiles them at runtime but does not type-check).
+  // rootDir widened to "." since test/ lives outside src/; noEmit so outDir is moot.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src", "test"]
+}
