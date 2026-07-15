@@ -40,7 +40,17 @@ Format:
 
 ## Evals & Testing
 
+### 2026-07-15 — Regression-guard the enforcement rule, not just the code it checks
+**What I learned:** I encoded the §5 house conventions (error-envelope `$ref`, `X-Request-Id` header) as two custom spectral rules, then wrote a deliberately-broken negative fixture + a self-test asserting BOTH rules fire. A rule that stops firing (edited, disabled, mis-scoped) fails silently and drops enforcement with the gate still green.
+**How I hit it:** L3 contract tooling — added `contracts/test/negative.openapi.yaml` + `ruleset-selftest.mjs` wired into CI as `pnpm test:ruleset`, alongside the real lint that must be genuinely clean (`--fail-severity=warn`).
+**Why it matters / where it transfers:** A linter/eval/guard is itself untested code — same failure class as a weak eval that passes a stub. If a rule protects an invariant, prove the rule can still fail on a known-bad input.
+
 ## Data & Domain (freight, Postgres, money/date handling)
+
+### 2026-07-15 — "Contract-first" doesn't mean the contract is valid — the lint gate does
+**What I learned:** The spectral gate caught TWO latent bugs in the already-merged, hand-authored L2 spec: an unquoted comma inside a YAML flow-mapping description that parsed as a bogus null property (crashed spectral/nimma), and a 3.1-style numeric `exclusiveMinimum: 0` used inside an `openapi: 3.0.3` doc (invalid in 3.0 — the 3.0 form is `minimum: 0, exclusiveMinimum: true`).
+**How I hit it:** Turning on spectral for L3 surfaced both immediately in a spec that had shipped through L2 review as "contract-first."
+**Why it matters / where it transfers:** Authoring the contract before the code buys you a design, not a valid artifact — YAML footguns and OAS 3.0-vs-3.1 schema drift slip past human review. The machine gate is what makes the spec actually load-bearing.
 
 ### 2026-07-14 — Make the breakdown sum to the total by construction, not by luck
 **What I learned:** Composing a money total as base + surcharges is robust only if each line rounds independently (HALF_UP to integer cents), percents are taken off the base (not a running total), and the breakdown lines are defined to sum exactly to the total — that also makes the result order-independent.
@@ -58,6 +68,11 @@ Format:
 **Why it matters / where it transfers:** Mixing seed into migrations makes a data typo fail app startup and lets IDs churn. Separating schema-lifecycle from data-lifecycle keeps migration history honest and cross-service references stable.
 
 ## Ops (Docker, CI/CD, AWS, observability)
+
+### 2026-07-15 — `git fetch origin <branch>` under actions/checkout does NOT create origin/<branch>
+**What I learned:** actions/checkout configures the remote with a narrow refspec, so a bare `git fetch origin main` only updates FETCH_HEAD — it does NOT create `refs/remotes/origin/main`. A base-vs-head diff that references `origin/main` then silently compares against nothing and the gate goes green.
+**How I hit it:** code-reviewer flagged it Blocking on the L3 oasdiff breaking-change job. Fixed with an explicit refspec `+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF` plus a `git rev-parse --verify` guard so a missing base fails loud instead of skipping.
+**Why it matters / where it transfers:** A CI gate that can't find its baseline should fail, not pass — a silently-empty diff is worse than no gate. Any CI step that diffs against a base ref must fetch that ref explicitly and assert it resolved.
 
 ### 2026-07-14 — Testcontainers needs a real Docker API, not Docker Desktop's CLI proxy (WSL2)
 **What I learned:** On WSL2 with Docker Desktop, `/var/run/docker.sock` is a CLI proxy (labels `com.docker.desktop.address=...docker-cli.sock`); the `docker` CLI negotiates an API version and works, but docker-java (what Testcontainers uses) hits `/info` un-negotiated and gets HTTP 400, so the ITs can't start a container locally.

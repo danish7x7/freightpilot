@@ -6,8 +6,8 @@ on:
     tags: ["*"]
   pull_request:
 
-# L0 CI is deliberately minimal: lint/typecheck + a hello-world test per service.
-# Contract checks (spectral/oasdiff) arrive at L3, the eval gate at L6 (MASTER_PLAN §9).
+# lint/typecheck/test per service, plus the L3 contract gate (spectral lint +
+# oasdiff breaking-change check + generated-client drift check). Eval gate lands at L6 (§9).
 jobs:
   node-services:
     name: node · ${{ matrix.service }}
@@ -55,6 +55,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # L3 DoD: the TS client is generated in CI and must match the committed contract.
+      - name: Regenerate API client from contract
+        run: pnpm gen:api
+      - name: Fail if the generated client drifted from the contract
+        run: git diff --exit-code src/api
 
   rates-service:
     name: java · rates
@@ -72,3 +77,63 @@ jobs:
       # `verify` runs Surefire unit tests AND Failsafe (*IT) integration tests, which
       # spin up Postgres via Testcontainers (Docker is available on ubuntu runners).
       - run: mvn -B -q verify
+
+  contracts:
+    name: contracts · lint + breaking-change
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: contracts/pnpm-lock.yaml
+      - name: Install spectral
+        working-directory: contracts
+        run: pnpm install --frozen-lockfile
+      # L3 DoD: all specs lint clean against the FreightPilot ruleset (§5 error
+      # envelope + X-Request-Id conventions are enforced as custom rules).
+      - name: Spectral lint (all specs)
+        working-directory: contracts
+        run: pnpm lint
+      # Regression-guards the custom §5 rules: fails if they stop catching violations.
+      - name: Ruleset self-test
+        working-directory: contracts
+        run: pnpm test:ruleset
+      # L3 DoD: breaking-change check on PRs. Compares each spec to its version on
+      # the PR base branch; a newly-added spec (no base version) is skipped.
+      - name: Breaking-change check vs base (oasdiff)
+        if: github.event_name == 'pull_request'
+        env:
+          OASDIFF_VERSION: "1.23.0"
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          tarball="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          rel="https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}"
+          curl -fsSL "${rel}/${tarball}" -o "/tmp/${tarball}"
+          curl -fsSL "${rel}/checksums.txt" -o /tmp/oasdiff_checksums.txt
+          # Pin + integrity-check the downloaded binary (supply-chain surface).
+          ( cd /tmp && grep " ${tarball}\$" oasdiff_checksums.txt | sha256sum -c - )
+          tar -xzf "/tmp/${tarball}" -C /tmp oasdiff
+          # Explicit refspec so origin/${BASE_REF} actually resolves — actions/checkout
+          # sets a narrow refspec, so a bare `git fetch origin main` would only write
+          # FETCH_HEAD and the breaking-change check below would silently skip everything.
+          git fetch --no-tags --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          git rev-parse --verify --quiet "origin/${BASE_REF}" >/dev/null \
+            || { echo "::error::could not resolve base ref origin/${BASE_REF}"; exit 1; }
+          rc=0
+          for spec in contracts/*.openapi.yaml; do
+            if git cat-file -e "origin/${BASE_REF}:${spec}" 2>/dev/null; then
+              git show "origin/${BASE_REF}:${spec}" > /tmp/base_spec.yaml
+              echo "::group::oasdiff breaking — ${spec} vs origin/${BASE_REF}"
+              /tmp/oasdiff breaking /tmp/base_spec.yaml "${spec}" --fail-on ERR || rc=1
+              echo "::endgroup::"
+            else
+              echo "No base version of ${spec} on origin/${BASE_REF} — new spec, skipping."
+            fi
+          done
+          exit $rc

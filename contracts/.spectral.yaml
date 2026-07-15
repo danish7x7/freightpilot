@@ -1,0 +1,42 @@
+# Spectral ruleset for FreightPilot OpenAPI contracts (L3 gate — MASTER_PLAN §3, §5).
+# Extends the standard OAS ruleset and adds the house conventions from §5 as
+# machine-checked rules, so every spec (rates today; booking + agent later) is
+# held to the same error-envelope + X-Request-Id contract. `pnpm lint` runs with
+# --fail-severity=warn, so the curated ruleset below must be genuinely clean.
+extends: ["spectral:oas"]
+
+rules:
+  # --- Stylistic OAS rules we deliberately do NOT enforce yet ---------------
+  # These are opinions, not house conventions; enabling them would force
+  # contract-content churn (tags, contact block, per-operation descriptions)
+  # that L3 does not call for. Turn back on if/when we adopt them.
+  operation-tags: off
+  operation-description: off
+  info-contact: off
+  info-license: off
+  contact-properties: off
+  license-url: off
+
+  # --- FreightPilot house conventions (§5) ---------------------------------
+  freightpilot-error-responses-use-envelope:
+    description: "Every 4xx/5xx response must reuse the shared ErrorResponse (uniform ErrorEnvelope, §5)."
+    message: "{{path}} — error responses must be $ref '#/components/responses/ErrorResponse'"
+    severity: error
+    resolved: false
+    given: "$.paths[*][get,put,post,delete,patch,options,head,trace].responses[?(@property && @property.match(/^[45]/))]"
+    then:
+      - field: "$ref"
+        function: truthy
+      - field: "$ref"
+        function: pattern
+        functionOptions:
+          match: "#/components/responses/ErrorResponse$"
+
+  freightpilot-responses-declare-request-id:
+    description: "Every response must declare an X-Request-Id header (correlation id, §5 / §8)."
+    message: "{{path}} — response must declare an X-Request-Id header"
+    severity: error
+    given: "$.paths[*][get,put,post,delete,patch,options,head,trace].responses[*]"
+    then:
+      field: "headers.X-Request-Id"
+      function: truthy
