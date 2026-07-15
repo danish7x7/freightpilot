@@ -14,6 +14,11 @@ Format:
 
 ## Spring Boot / Java
 
+### 2026-07-14 — @DecimalMax doesn't stop a BigDecimal DoS; bound scale with @Digits
+**What I learned:** Jackson's max-number-length guard counts characters, so a ~12-char literal like `1E1000000000` slips through and parses to a BigDecimal with scale ≈ -1e9; a later `setScale(0)` then tries to materialize a ~10^9-digit integer → multi-GB allocation. `@DecimalMax` checks the value but not the precision, so it doesn't help; `@Digits(integer, fraction)` rejects the pathological scale cheaply *before* the math runs.
+**How I hit it:** security-reviewer flagged it HIGH pre-merge — an attacker gets a valid AIR rate_card_id from public `/rates/search`, then POSTs that crafted `volume_cbm` to `/quotes/calculate`; the air chargeable-weight math would OOM. Fixed with `@Digits` on the decimal DTO fields; crafted payload now returns 400, no OOM.
+**Why it matters / where it transfers:** For any BigDecimal that feeds scale-sensitive math, bound precision/scale, not just magnitude — the danger is the exponent, and a short string can encode an enormous one.
+
 ### 2026-07-14 — Flyway-on-startup gives you readiness for free
 **What I learned:** Running Flyway inside the app's startup (the default Spring Boot wiring) means a failed migration fails the boot, so the container never reports healthy.
 **How I hit it:** I considered decoupling migration from startup, but keeping it inline means a bad V-migration → app won't start → container stays unhealthy → `make up --wait` blocks — no separate readiness check needed.
@@ -37,6 +42,11 @@ Format:
 
 ## Data & Domain (freight, Postgres, money/date handling)
 
+### 2026-07-14 — Make the breakdown sum to the total by construction, not by luck
+**What I learned:** Composing a money total as base + surcharges is robust only if each line rounds independently (HALF_UP to integer cents), percents are taken off the base (not a running total), and the breakdown lines are defined to sum exactly to the total — that also makes the result order-independent.
+**How I hit it:** L2 quote calculation (ADR-0003): I chose percent-of-base over percent-of-running-total so surcharge order can't change the price, and asserted in tests that the breakdown lines add up to `total_cents` exactly, with everything in BigDecimal/integer — no `double`.
+**Why it matters / where it transfers:** A breakdown that doesn't reconcile to its total is a bug the user sees; booking-service has to re-derive the same number across the service boundary, so order-independence + fixed rounding make the contract reproducible instead of fragile.
+
 ### 2026-07-14 — Seed realistic ambiguity so a query can't pass trivially
 **What I learned:** Giving the busy ocean lanes 2-3 OVERLAPPING validity windows makes the "cheapest valid on DATE" query actually exercise its date-range filter — three cards are valid on the test date, not one.
 **How I hit it:** The L1 DoD query for CNSHA→USOAK returns card …001 at $2,680, but only because the filter picks it out of 3 overlapping candidates; with one card per lane the query would pass even if the date logic were broken.
@@ -48,6 +58,11 @@ Format:
 **Why it matters / where it transfers:** Mixing seed into migrations makes a data typo fail app startup and lets IDs churn. Separating schema-lifecycle from data-lifecycle keeps migration history honest and cross-service references stable.
 
 ## Ops (Docker, CI/CD, AWS, observability)
+
+### 2026-07-14 — Testcontainers needs a real Docker API, not Docker Desktop's CLI proxy (WSL2)
+**What I learned:** On WSL2 with Docker Desktop, `/var/run/docker.sock` is a CLI proxy (labels `com.docker.desktop.address=...docker-cli.sock`); the `docker` CLI negotiates an API version and works, but docker-java (what Testcontainers uses) hits `/info` un-negotiated and gets HTTP 400, so the ITs can't start a container locally.
+**How I hit it:** L2 `*IT` Testcontainers tests failed to launch locally despite `docker` commands working; the compose stack was fine. The ITs compile and their singleton-container + `@DynamicPropertySource` + seed-loading pattern was confirmed sound — they run on CI's native Docker.
+**Why it matters / where it transfers:** "docker CLI works" doesn't imply "the Docker API client works" — programmatic Docker clients can fail where the CLI succeeds. When the local daemon is a proxy, verify the equivalent behavior another way (I checked the same cases against the live compose stack) and let CI's native Docker be the source of truth.
 
 ### 2026-07-14 — Docker `internal: true` networks can't publish host ports
 **What I learned:** A container on an `internal: true` network cannot publish a host port — the mapping is accepted but silently dead.

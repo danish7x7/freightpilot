@@ -33,3 +33,36 @@ docker compose exec -T rates-db psql -U rates -d rates -c "
 ```
 
 Expected: rate card `2222…-001`, `base_rate_cents = 268000` ($2,680.00), transit 18–22 days, window 2026-01-01 → 2026-12-31.
+
+## Domain + API (L2)
+
+Contract: `contracts/rates.openapi.yaml` (written before the controllers, per §5). JSON is snake_case; money is always integer cents.
+
+### Endpoints
+
+- `GET /api/v1/rates/search?origin&dest&mode&ship_date` — rate cards whose validity window contains `ship_date`, cheapest first.
+- `POST /api/v1/quotes/calculate` — `{ rate_card_id, shipment }` → base cost + surcharge breakdown + total. **Pure: persists nothing** (persisting a quote is booking-service, §4.2). Unknown card → `404 RATE_NOT_FOUND`.
+
+Errors use the uniform envelope `{code, message, details[]}`; every response echoes/​mints `X-Request-Id`.
+
+### Pricing (Strategy pattern, §4.4)
+
+One `RateStrategy` per mode computes the **base cost**; a single `QuoteCalculator` composes surcharges. Strategies are pure (no Spring) and unit-tested directly.
+
+| Mode | Base cost |
+|---|---|
+| OCEAN | `base_rate_cents × 1` (single FEU; multi-container is future) |
+| AIR | `base_rate_cents × chargeable_kg`, `chargeable = max(actual, volume_cbm × 167)` (IATA 1:6000), rounded HALF_UP |
+| TRUCK | `base_rate_cents × lane.distance_mi` |
+
+### Surcharge composition (documented ordering)
+
+Every surcharge is computed against the **base cost**: `FLAT` adds fixed cents; `PERCENT` adds `base × bps/10000`, rounded HALF_UP per line. Because both reference the base (never each other's output), **order is immaterial by construction** — matching real BAF/fuel ("percent of base", `docs/domain-notes.md`). Breakdown lines sum exactly to `total_cents` (§4.2).
+
+Example (ocean card `…001`, base 268000): FUEL 15.5% → 41540, PEAK_SEASON → 45000, SECURITY → 12000; **total 366540**.
+
+### Tests
+
+- Unit (Surefire, `mvn test`) — pure JUnit per strategy (incl. all three air chargeable-weight branches, truck's illegal null-distance) and surcharge composition/rounding. No Spring, no DB.
+- Integration (Failsafe `*IT`, `mvn verify`) — Testcontainers Postgres runs Flyway + loads `seed.sql`, then asserts the migration/seed/DoD-query/idempotency and drives the real endpoints.
+

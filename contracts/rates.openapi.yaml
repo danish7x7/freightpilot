@@ -1,0 +1,161 @@
+openapi: 3.0.3
+info:
+  title: rates-service API
+  version: 0.2.0
+  description: >
+    Lanes, rate cards, surcharges, and quote calculation for FreightPilot.
+    Money is always integer cents; surcharge PERCENT amounts are basis points.
+    `POST /quotes/calculate` is a pure function — it never persists (persisting a
+    quote is booking-service's job, §4.2). Written contract-first (L3 gate) ahead
+    of the controllers per hard rule §5.
+servers:
+  - url: http://localhost:8080
+    description: local compose
+paths:
+  /api/v1/rates/search:
+    get:
+      operationId: searchRates
+      summary: Rate cards valid for a ship date on a lane
+      parameters:
+        - { name: origin, in: query, required: true, schema: { type: string, minLength: 5, maxLength: 5 }, example: CNSHA }
+        - { name: dest, in: query, required: true, schema: { type: string, minLength: 5, maxLength: 5 }, example: USOAK }
+        - { name: mode, in: query, required: true, schema: { $ref: '#/components/schemas/Mode' } }
+        - { name: ship_date, in: query, required: true, schema: { type: string, format: date }, example: '2026-08-01' }
+      responses:
+        '200':
+          description: Matching rate cards (may be several — overlapping validity windows)
+          headers:
+            X-Request-Id:
+              description: Correlation id, echoed from the request or minted if absent/invalid.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rate_cards]
+                properties:
+                  rate_cards:
+                    type: array
+                    items: { $ref: '#/components/schemas/RateCardView' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/quotes/calculate:
+    post:
+      operationId: calculateQuote
+      summary: Full quote calculation with surcharge breakdown (pure, no persistence)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CalculateRequest' }
+      responses:
+        '200':
+          description: Computed quote
+          headers:
+            X-Request-Id:
+              description: Correlation id, echoed from the request or minted if absent/invalid.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuoteResponse' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  responses:
+    ErrorResponse:
+      description: Uniform error envelope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    Mode:
+      type: string
+      enum: [OCEAN, AIR, TRUCK]
+    RateUnit:
+      type: string
+      enum: [PER_CONTAINER, PER_KG, PER_PALLET, PER_MILE]
+    SurchargeCalc:
+      type: string
+      enum: [FLAT, PERCENT]
+    # Shared shipment type (§5). booking + agent consume the identical shape — do not fork.
+    ShipmentSpec:
+      type: object
+      required: [origin_code, dest_code, ship_date, cargo]
+      properties:
+        origin_code: { type: string, minLength: 5, maxLength: 5 }
+        dest_code: { type: string, minLength: 5, maxLength: 5 }
+        mode: { $ref: '#/components/schemas/Mode' }
+        ship_date: { type: string, format: date }
+        deliver_by: { type: string, format: date }
+        cargo: { $ref: '#/components/schemas/Cargo' }
+    Cargo:
+      type: object
+      required: [weight_kg, description]
+      properties:
+        pallets: { type: integer, minimum: 1, maximum: 100 }
+        weight_kg: { type: number, exclusiveMinimum: 0, maximum: 30000 }
+        volume_cbm: { type: number, exclusiveMinimum: 0 }
+        description: { type: string, maxLength: 500 }
+    CalculateRequest:
+      type: object
+      required: [rate_card_id, shipment]
+      properties:
+        rate_card_id: { type: string, format: uuid }
+        shipment: { $ref: '#/components/schemas/ShipmentSpec' }
+    RateCardView:
+      type: object
+      required: [id, origin_code, origin_name, dest_code, dest_name, mode, base_rate_cents, currency, unit, transit_days_min, transit_days_max, valid_from, valid_to]
+      properties:
+        id: { type: string, format: uuid }
+        origin_code: { type: string }
+        origin_name: { type: string }
+        dest_code: { type: string }
+        dest_name: { type: string }
+        mode: { $ref: '#/components/schemas/Mode' }
+        distance_mi: { type: integer, nullable: true }
+        base_rate_cents: { type: integer, format: int64 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        unit: { $ref: '#/components/schemas/RateUnit' }
+        transit_days_min: { type: integer }
+        transit_days_max: { type: integer }
+        valid_from: { type: string, format: date }
+        valid_to: { type: string, format: date }
+    BreakdownLine:
+      type: object
+      description: One line of the quote breakdown. component=BASE is the base cost; others are surcharge types.
+      required: [component, amount_cents]
+      properties:
+        component: { type: string, example: FUEL }
+        calc: { $ref: '#/components/schemas/SurchargeCalc' }
+        rate_bps: { type: integer, nullable: true, description: basis points, present only when calc=PERCENT }
+        amount_cents: { type: integer, format: int64 }
+    QuoteResponse:
+      type: object
+      description: >
+        Cross-service contract — booking snapshots `breakdown`/`total_cents` into
+        quotes.breakdown JSONB (§4.2). The breakdown lines sum exactly to total_cents.
+      required: [rate_card_id, origin_code, dest_code, mode, currency, base_cost_cents, breakdown, total_cents, transit_days_min, transit_days_max]
+      properties:
+        rate_card_id: { type: string, format: uuid }
+        origin_code: { type: string }
+        dest_code: { type: string }
+        mode: { $ref: '#/components/schemas/Mode' }
+        currency: { type: string }
+        base_cost_cents: { type: integer, format: int64 }
+        breakdown:
+          type: array
+          items: { $ref: '#/components/schemas/BreakdownLine' }
+        total_cents: { type: integer, format: int64 }
+        transit_days_min: { type: integer }
+        transit_days_max: { type: integer }
+    ErrorEnvelope:
+      type: object
+      required: [code, message, details]
+      properties:
+        code: { type: string, example: RATE_NOT_FOUND }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: string }
