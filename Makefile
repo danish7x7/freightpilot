@@ -24,9 +24,14 @@ ps:
 logs:
 	$(COMPOSE) logs -f
 
-## seed: no-op stub at L0 — real seed data lands in L1 (see MASTER_PLAN §3).
+## seed: load rates-service demo data. Idempotent (fixed UUIDs + ON CONFLICT DO
+## NOTHING), so it's safe to re-run. Runs psql INSIDE the rates-db container per
+## ADR-0001 (rates-db has no host port); requires the stack to be up (`make up`).
 seed:
-	@echo "make seed: nothing to seed yet (schemas + seed data arrive in L1)."
+	@echo ">> seeding rates-db"
+	$(COMPOSE) exec -T rates-db psql -v ON_ERROR_STOP=1 -U rates -d rates \
+		< services/rates/src/main/resources/db/seed/seed.sql
+	@echo "seed complete (idempotent — safe to re-run)."
 
 ## test: run each service's hello-world test suite.
 test:

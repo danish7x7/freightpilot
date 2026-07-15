@@ -14,7 +14,15 @@ Format:
 
 ## Spring Boot / Java
 
-(entries appended here)
+### 2026-07-14 — Flyway-on-startup gives you readiness for free
+**What I learned:** Running Flyway inside the app's startup (the default Spring Boot wiring) means a failed migration fails the boot, so the container never reports healthy.
+**How I hit it:** I considered decoupling migration from startup, but keeping it inline means a bad V-migration → app won't start → container stays unhealthy → `make up --wait` blocks — no separate readiness check needed.
+**Why it matters / where it transfers:** Fail-fast at boot turns "is the schema ready?" into the same signal as "is the app up?" — one health gate instead of two, and no window where the app serves against a half-migrated DB.
+
+### 2026-07-14 — Spring's datasource wants a jdbc: URL, not a postgres:// URI
+**What I learned:** Spring Boot cannot parse a `postgres://user:pass@host/db` connection URI into a DataSource; it needs `SPRING_DATASOURCE_URL=jdbc:postgresql://...` plus separate username/password.
+**How I hit it:** The L0 compose passed `RATES_DATABASE_URL=postgres://...` (fine for node/Drizzle); guardian flagged it as a must-fix when rates got a real datasource — the URI form would have failed at boot.
+**Why it matters / where it transfers:** "Database URL" isn't one format — the node ecosystem eats libpq URIs, the JDBC world wants `jdbc:` + split creds. Per-service env has to speak each stack's dialect, not a shared assumption.
 
 ## TypeScript / Node / Fastify
 
@@ -28,6 +36,16 @@ Format:
 ## Evals & Testing
 
 ## Data & Domain (freight, Postgres, money/date handling)
+
+### 2026-07-14 — Seed realistic ambiguity so a query can't pass trivially
+**What I learned:** Giving the busy ocean lanes 2-3 OVERLAPPING validity windows makes the "cheapest valid on DATE" query actually exercise its date-range filter — three cards are valid on the test date, not one.
+**How I hit it:** The L1 DoD query for CNSHA→USOAK returns card …001 at $2,680, but only because the filter picks it out of 3 overlapping candidates; with one card per lane the query would pass even if the date logic were broken.
+**Why it matters / where it transfers:** Seed data is a test fixture — if it has no ambiguity, a "passing" query proves nothing. Same lesson as writing a test whose input can distinguish the right implementation from a stub.
+
+### 2026-07-14 — Seed is data, not schema: keep it out of migrations and make it idempotent
+**What I learned:** A seed belongs in a standalone script (fixed UUIDs + `ON CONFLICT (id) DO NOTHING`, one transaction), not in a Flyway migration — a second run is `INSERT 0 0` and IDs never move.
+**How I hit it:** Chose `make seed` over an `R__seed.sql` repeatable migration (ADR-0002); stable IDs matter because booking-service references rates IDs FK-by-convention across service boundaries.
+**Why it matters / where it transfers:** Mixing seed into migrations makes a data typo fail app startup and lets IDs churn. Separating schema-lifecycle from data-lifecycle keeps migration history honest and cross-service references stable.
 
 ## Ops (Docker, CI/CD, AWS, observability)
 
