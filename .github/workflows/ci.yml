@@ -61,6 +61,35 @@ jobs:
       - name: Fail if the generated client drifted from the contract
         run: git diff --exit-code src/api
 
+  client-e2e:
+    name: node · client e2e
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('client/pnpm-lock.yaml') }}
+      - name: Install Playwright chromium
+        run: pnpm exec playwright install --with-deps chromium
+      # Narrowed-L4 DoD: search→quote happy path. Hermetic (rates API mocked at the
+      # network layer) — no backend needed. Live compose-stack E2E deferred (ADR-0004).
+      - name: Playwright E2E (mocked rates API)
+        run: pnpm e2e
+
   rates-service:
     name: java · rates
     runs-on: ubuntu-latest

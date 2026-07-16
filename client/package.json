@@ -14,14 +14,18 @@
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "gen:api": "openapi-typescript ../contracts/rates.openapi.yaml -o src/api/rates.gen.ts"
+    "gen:api": "openapi-typescript ../contracts/rates.openapi.yaml -o src/api/rates.gen.ts",
+    "e2e": "playwright test"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.62.7",
+    "openapi-fetch": "^0.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.49.1",
     "@testing-library/react": "^16.1.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
