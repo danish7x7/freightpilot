@@ -6,5 +6,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    // Unit tests only. Playwright specs live in e2e/ (*.spec.ts) and run via `pnpm e2e`.
+    include: ["{src,test}/**/*.test.{ts,tsx}"],
+    exclude: ["e2e/**", "node_modules/**", "dist/**"],
   },
 });
