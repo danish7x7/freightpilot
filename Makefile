@@ -1,6 +1,6 @@
 # FreightPilot — top-level orchestration.
 # Prefer these targets over raw docker/compose commands (CLAUDE.md).
-.PHONY: up down restart ps logs seed test evals
+.PHONY: up down restart ps logs seed migrate-booking test evals
 
 COMPOSE ?= docker compose
 
@@ -32,6 +32,13 @@ seed:
 	$(COMPOSE) exec -T rates-db psql -v ON_ERROR_STOP=1 -U rates -d rates \
 		< services/rates/src/main/resources/db/seed/seed.sql
 	@echo "seed complete (idempotent — safe to re-run)."
+
+## migrate-booking: apply booking-service Drizzle migrations. Runs the migrator INSIDE
+## the compose network because booking-db has no host port (ADR-0001); requires `make up`.
+migrate-booking:
+	@echo ">> applying booking migrations"
+	$(COMPOSE) run --rm --no-deps -T booking-service node dist/db/migrate.js
+	@echo "booking migrations applied."
 
 ## test: run each service's hello-world test suite.
 test:

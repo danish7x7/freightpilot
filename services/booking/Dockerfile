@@ -17,6 +17,10 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/dist ./dist
+# Committed migration SQL — needed at runtime by `node dist/db/migrate.js`
+# (`make migrate-booking` runs it inside the network, since booking-db has no host
+# port per ADR-0001). drizzle-orm's migrator applies it; drizzle-kit is not needed here.
+COPY drizzle ./drizzle
 ENV PORT=8081
 EXPOSE 8081
 # Healthcheck uses node's global fetch — no curl/wget needed in the image.

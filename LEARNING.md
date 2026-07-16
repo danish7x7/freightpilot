@@ -40,12 +40,27 @@ Format:
 
 ## Evals & Testing
 
+### 2026-07-15 — A mocked-network E2E only stays honest if its fixtures are typed against the contract
+**What I learned:** A Playwright happy-path that mocks the network is only trustworthy if the mock fixtures are TYPED against the generated contract (`rates.gen.ts`) — then any contract drift breaks the test at compile time (tsc), not silently at runtime. Untyped JSON fixtures will happily lie about matching the real API.
+**How I hit it:** L4 rates-half E2E — I typed the mocked responses against the L3-generated types so the fake network can't drift from the spec without breaking the build.
+**Why it matters / where it transfers:** A mock is a claim about a real dependency; type it against the source of truth or it decays into fiction. Same reason you generate the client from the contract instead of hand-rolling it.
+
 ### 2026-07-15 — Regression-guard the enforcement rule, not just the code it checks
 **What I learned:** I encoded the §5 house conventions (error-envelope `$ref`, `X-Request-Id` header) as two custom spectral rules, then wrote a deliberately-broken negative fixture + a self-test asserting BOTH rules fire. A rule that stops firing (edited, disabled, mis-scoped) fails silently and drops enforcement with the gate still green.
 **How I hit it:** L3 contract tooling — added `contracts/test/negative.openapi.yaml` + `ruleset-selftest.mjs` wired into CI as `pnpm test:ruleset`, alongside the real lint that must be genuinely clean (`--fail-severity=warn`).
 **Why it matters / where it transfers:** A linter/eval/guard is itself untested code — same failure class as a weak eval that passes a stub. If a rule protects an invariant, prove the rule can still fail on a known-bad input.
 
 ## Data & Domain (freight, Postgres, money/date handling)
+
+### 2026-07-16 — Pin ORM column modes so internal types stay honest
+**What I learned:** Drizzle lets you pin a column's JS mode — `bigint` cents as `mode:'bigint'`, timestamptz as `mode:'date'` (→ Date), `char(3)` currency snapshotted with no default. Pinning at the schema layer keeps the internal representation honest and pushes ISO-string / number coercion out to the boundaries only.
+**How I hit it:** booking L1 schema (§4.2) — guardian pinned the modes on quotes/bookings/booking_events so `total_cents` never silently becomes a lossy JS Number and timestamps come back as Date, not strings.
+**Why it matters / where it transfers:** The type you read back from the DB should match the type the column really is; leaving it to ORM defaults invites lossy Number coercion on money. Coerce at the edges, stay exact in the core.
+
+### 2026-07-15 — "Client owns no business logic" is concrete: sort server scalars, render totals verbatim
+**What I learned:** §2.2's "client owns no business logic" cashes out as three habits: sort only on server-provided scalars (never a client-computed total ranking), render server totals verbatim, and keep exactly one cents→display formatter that divides by 100 only at the render boundary.
+**How I hit it:** L4 QuoteList/QuoteBreakdown/formatMoney — the sort toggles `base_rate_cents`/`transit_days_min` (labeled "Base rate", not "cheapest"), the breakdown never re-sums, and ÷100 lives in one place.
+**Why it matters / where it transfers:** If the client re-derives a price or a ranking it can disagree with the service — two sources of truth for one number. Keeping money math server-side is the same discipline as not letting the UI own the state machine.
 
 ### 2026-07-15 — "Contract-first" doesn't mean the contract is valid — the lint gate does
 **What I learned:** The spectral gate caught TWO latent bugs in the already-merged, hand-authored L2 spec: an unquoted comma inside a YAML flow-mapping description that parsed as a bogus null property (crashed spectral/nimma), and a 3.1-style numeric `exclusiveMinimum: 0` used inside an `openapi: 3.0.3` doc (invalid in 3.0 — the 3.0 form is `minimum: 0, exclusiveMinimum: true`).
@@ -69,6 +84,11 @@ Format:
 
 ## Ops (Docker, CI/CD, AWS, observability)
 
+### 2026-07-16 — Design the migration path around the network topology
+**What I learned:** A Postgres on an internal-only network with no host port (ADR-0001) simply cannot be migrated from the host — the migrator has to run INSIDE the network (at service boot, via `docker compose run`, or `exec`). So `make migrate-booking` runs the drizzle-orm migrator in-container; it's the TS analogue of rates' Flyway-on-startup.
+**How I hit it:** booking L1 — booking-db has no published host port, so a host-run migrator can't reach it; I put the migrate step inside the compose network (`docker compose run --rm --no-deps booking-service node dist/db/migrate.js`) instead.
+**Why it matters / where it transfers:** Let the network topology dictate where operational scripts run, not the other way round — if the DB is unreachable by design, every tool that touches it has to live where the DB does.
+
 ### 2026-07-15 — `git fetch origin <branch>` under actions/checkout does NOT create origin/<branch>
 **What I learned:** actions/checkout configures the remote with a narrow refspec, so a bare `git fetch origin main` only updates FETCH_HEAD — it does NOT create `refs/remotes/origin/main`. A base-vs-head diff that references `origin/main` then silently compares against nothing and the gate goes green.
 **How I hit it:** code-reviewer flagged it Blocking on the L3 oasdiff breaking-change job. Fixed with an explicit refspec `+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF` plus a `git rev-parse --verify` guard so a missing base fails loud instead of skipping.
@@ -90,6 +110,11 @@ Format:
 **Why it matters / where it transfers:** Turning a written rule into "impossible to violate by construction" is stronger than a lint or a code review — same idea as making an invalid booking state transition a type error.
 
 ## Process (what worked / what didn't in the build workflow)
+
+### 2026-07-15 — Narrow the work, not the DoD
+**What I learned:** When a layer half-depends on a service that doesn't exist yet, narrow the WORK (ship the half you can build honestly) and keep the layer's DoD/gate OPEN for the deferred half — do NOT stub a fake path. Stubbing a booking flow the client can't really call would violate contract-first (§5) and client-owns-no-business-logic (§2.2).
+**How I hit it:** L4 shipped the rates-facing UI only; the booking half is deferred until booking-service + its contract exist (ADR-0004), with the L4 gate explicitly left OPEN.
+**Why it matters / where it transfers:** A green DoD you reached by faking the missing dependency is a lie you'll debug later. Deferring honestly keeps the gate meaningful — better a truthfully-open gate than a falsely-closed one.
 
 ### 2026-07-14 — Validate CI jobs in throwaway containers when the host lacks the toolchain
 **What I learned:** You can prove each CI job passes without the toolchain installed locally by running it in the same base image CI uses.

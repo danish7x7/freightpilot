@@ -33,6 +33,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # Exercises the tsc emit (e.g. booking's dist/db/migrate.js, which make
+      # migrate-booking runs in-container) — typecheck is noEmit and wouldn't catch it.
+      - run: pnpm build
 
   client:
     name: node · client
@@ -106,6 +109,28 @@ jobs:
       # `verify` runs Surefire unit tests AND Failsafe (*IT) integration tests, which
       # spin up Postgres via Testcontainers (Docker is available on ubuntu runners).
       - run: mvn -B -q verify
+
+  booking-it:
+    name: node · booking integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/booking
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: services/booking/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Data-layer DoD: migrations apply cleanly to a real Postgres (Testcontainers on
+      # the runner's native Docker) and the schema behaves. Unit tests run in node-services.
+      - name: Drizzle migration + schema integration test
+        run: pnpm test:integration
 
   contracts:
     name: contracts · lint + breaking-change
