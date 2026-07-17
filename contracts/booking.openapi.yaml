@@ -1,0 +1,318 @@
+openapi: 3.0.3
+info:
+  title: booking-service API
+  version: 0.1.0
+  description: >
+    Quote holds, the booking lifecycle state machine, the event log, and idempotent
+    booking creation for FreightPilot (§2.4, §4.2, §5). Money is always integer cents.
+    booking-service owns NO rate math — a quote's breakdown/total is snapshotted verbatim
+    from rates-service (§2.2); `lane_id`/`rate_card_id` reference rates data by convention
+    (no cross-database FK). Written contract-first (L3 gate) ahead of the routes.
+servers:
+  - url: http://localhost:8081
+    description: local compose
+paths:
+  /api/v1/quotes:
+    post:
+      operationId: createQuote
+      summary: Persist a calculated quote (status ACTIVE, expires in 24h)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateQuoteRequest' }
+      responses:
+        '201':
+          description: Quote persisted
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/quotes/{id}/hold:
+    post:
+      operationId: holdQuote
+      summary: Reserve a quote (quote_status ACTIVE → HELD)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActorRequest' }
+      responses:
+        '200':
+          description: Quote held
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/bookings:
+    post:
+      operationId: createBooking
+      summary: Create a booking from a HELD quote (idempotent). Lands the booking in HELD.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            Client-supplied idempotency key (the agent reuses the confirmation token, §6.3).
+            Replaying the same key returns the original booking (200) instead of creating a
+            new one. First-write-wins — a divergent payload on replay is ignored, not rejected.
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBookingRequest' }
+      responses:
+        '201':
+          description: Booking created (now HELD)
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '200':
+          description: Idempotent replay — the original booking for this Idempotency-Key
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/bookings/{id}/confirm:
+    post:
+      operationId: confirmBooking
+      summary: Confirm a booking (booking_status HELD → CONFIRMED)
+      description: >
+        Actor-agnostic — booking-service stamps whatever actor the caller sends. The
+        "user click only" gate is enforced upstream in agent-service's confirmation token
+        (§6.3.2); the booking API is the same public API for UI and agent (§2.2).
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActorRequest' }
+      responses:
+        '200':
+          description: Booking confirmed
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/bookings/{id}/cancel:
+    post:
+      operationId: cancelBooking
+      summary: Cancel a booking (QUOTED | HELD | CONFIRMED → CANCELLED)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActorRequest' }
+      responses:
+        '200':
+          description: Booking cancelled
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/bookings/{id}:
+    get:
+      operationId: getBooking
+      summary: A booking with its full event timeline
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Booking + ordered event timeline
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingDetail' }
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  headers:
+    XRequestId:
+      description: Correlation id, echoed from the request or minted if absent/invalid.
+      schema: { type: string }
+  responses:
+    ErrorResponse:
+      description: Uniform error envelope
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    Actor:
+      type: string
+      enum: [user, agent, system]
+    QuoteStatus:
+      type: string
+      enum: [ACTIVE, HELD, EXPIRED, CONSUMED]
+    BookingStatus:
+      type: string
+      enum: [QUOTED, HELD, CONFIRMED, DOCUMENTS_ISSUED, EXPIRED, CANCELLED]
+    Mode:
+      type: string
+      enum: [OCEAN, AIR, TRUCK]
+    ActorRequest:
+      type: object
+      required: [actor]
+      properties:
+        actor: { $ref: '#/components/schemas/Actor' }
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Optional context (e.g. conversation_id for agent actions).
+    # Snapshot of the rates ShipmentSpec (§5) — stored verbatim, not re-validated here.
+    ShipmentSpec:
+      type: object
+      required: [origin_code, dest_code, ship_date, cargo]
+      properties:
+        origin_code: { type: string, minLength: 5, maxLength: 5 }
+        dest_code: { type: string, minLength: 5, maxLength: 5 }
+        mode: { $ref: '#/components/schemas/Mode' }
+        ship_date: { type: string, format: date }
+        deliver_by: { type: string, format: date }
+        cargo: { $ref: '#/components/schemas/Cargo' }
+    Cargo:
+      type: object
+      required: [weight_kg, description]
+      properties:
+        pallets: { type: integer, minimum: 1, maximum: 100 }
+        weight_kg: { type: number, minimum: 0, exclusiveMinimum: true, maximum: 30000 }
+        volume_cbm: { type: number, minimum: 0, exclusiveMinimum: true }
+        description: { type: string, maxLength: 500 }
+    BreakdownLine:
+      type: object
+      required: [component, amount_cents]
+      properties:
+        component: { type: string, example: FUEL }
+        calc: { type: string, enum: [FLAT, PERCENT], nullable: true }
+        rate_bps: { type: integer, nullable: true }
+        amount_cents: { type: integer, format: int64 }
+    CreateQuoteRequest:
+      type: object
+      required: [lane_id, rate_card_id, shipment, breakdown, total_cents, currency]
+      properties:
+        lane_id: { type: string, format: uuid }
+        rate_card_id: { type: string, format: uuid }
+        shipment: { $ref: '#/components/schemas/ShipmentSpec' }
+        breakdown:
+          type: array
+          items: { $ref: '#/components/schemas/BreakdownLine' }
+        total_cents: { type: integer, format: int64 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+    Quote:
+      type: object
+      required: [id, lane_id, rate_card_id, shipment, breakdown, total_cents, currency, status, expires_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        lane_id: { type: string, format: uuid }
+        rate_card_id: { type: string, format: uuid }
+        shipment: { $ref: '#/components/schemas/ShipmentSpec' }
+        breakdown:
+          type: array
+          items: { $ref: '#/components/schemas/BreakdownLine' }
+        total_cents: { type: integer, format: int64 }
+        currency: { type: string }
+        status: { $ref: '#/components/schemas/QuoteStatus' }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    CreateBookingRequest:
+      type: object
+      required: [quote_id, shipper_ref, actor]
+      properties:
+        quote_id: { type: string, format: uuid }
+        shipper_ref: { type: string, minLength: 1, maxLength: 200 }
+        actor: { $ref: '#/components/schemas/Actor' }
+        metadata:
+          type: object
+          additionalProperties: true
+    Booking:
+      type: object
+      required: [id, quote_id, shipper_ref, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        quote_id: { type: string, format: uuid }
+        shipper_ref: { type: string }
+        status: { $ref: '#/components/schemas/BookingStatus' }
+        created_at: { type: string, format: date-time }
+        confirmed_at: { type: string, format: date-time, nullable: true }
+    BookingEvent:
+      type: object
+      required: [from_status, to_status, actor, at]
+      properties:
+        # Null for the booking's birth event (null → QUOTED). allOf+nullable is the
+        # OAS 3.0 way to make a $ref nullable.
+        from_status:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/BookingStatus'
+        to_status: { $ref: '#/components/schemas/BookingStatus' }
+        actor: { $ref: '#/components/schemas/Actor' }
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        at: { type: string, format: date-time }
+    BookingDetail:
+      type: object
+      required: [booking, events]
+      properties:
+        booking: { $ref: '#/components/schemas/Booking' }
+        events:
+          type: array
+          description: Append-only transition log, oldest first.
+          items: { $ref: '#/components/schemas/BookingEvent' }
+    ErrorEnvelope:
+      type: object
+      required: [code, message, details]
+      properties:
+        code: { type: string, example: ILLEGAL_TRANSITION }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: string }

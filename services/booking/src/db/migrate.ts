@@ -1,23 +1,31 @@
-// Applies committed migrations (./drizzle) to BOOKING_DATABASE_URL, then exits.
-// Run INSIDE the compose network (booking-db has no host port, ADR-0001):
-//   docker compose run --rm --no-deps booking-service node dist/db/migrate.js
-// (wrapped as `make migrate-booking`). The Testcontainers IT applies the same
-// migrations to prove they're clean. This is a bare migrate-then-close step — the
-// app's DB pool / repository wiring lands at L2 when an endpoint first needs it.
+// Applies committed migrations (./drizzle) to a database URL. Used two ways:
+//   - boot-time: server.ts calls applyMigrations() before app.listen() (fail-fast).
+//   - CLI: `node dist/db/migrate.js` via `make migrate-booking`, run INSIDE the compose
+//     network because booking-db has no host port (ADR-0001).
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
-const url = process.env.BOOKING_DATABASE_URL;
-if (!url) {
-  console.error("BOOKING_DATABASE_URL is not set");
-  process.exit(1);
+export async function applyMigrations(url: string): Promise<void> {
+  const client = postgres(url, { max: 1 });
+  try {
+    await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
+  } finally {
+    await client.end();
+  }
 }
 
-const client = postgres(url, { max: 1 });
-try {
-  await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
-  console.log("booking migrations applied");
-} finally {
-  await client.end();
+// CLI entrypoint — only when run directly, not when imported by server.ts.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const url = process.env.BOOKING_DATABASE_URL;
+  if (!url) {
+    console.error("BOOKING_DATABASE_URL is not set");
+    process.exit(1);
+  }
+  applyMigrations(url)
+    .then(() => console.log("booking migrations applied"))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }

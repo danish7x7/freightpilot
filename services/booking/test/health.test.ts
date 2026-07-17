@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
+import type { Db } from "../src/db/client.js";
 
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  app = buildApp();
+  // /health is DB-free, so a stub db is fine — its handlers are never invoked here.
+  app = buildApp({} as unknown as Db);
   await app.ready();
 });
 
