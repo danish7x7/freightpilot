@@ -14,7 +14,7 @@
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "gen:api": "openapi-typescript ../contracts/rates.openapi.yaml -o src/api/rates.gen.ts",
+    "gen:api": "openapi-typescript ../contracts/rates.openapi.yaml -o src/api/rates.gen.ts && openapi-typescript ../contracts/booking.openapi.yaml -o src/api/booking.gen.ts",
     "e2e": "playwright test"
   },
   "dependencies": {

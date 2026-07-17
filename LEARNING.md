@@ -99,6 +99,11 @@ Format:
 
 ## Ops (Docker, CI/CD, AWS, observability)
 
+### 2026-07-16 — `git diff --exit-code` only gates TRACKED files — a new generated client is toothless until committed
+**What I learned:** The regen-then-diff CI pattern (`pnpm gen:api && git diff --exit-code src/api`) proves the checked-in client matches the spec — but `git diff` ignores UNTRACKED files. So a brand-new generated file passes trivially until it's `git add`-ed: CI regenerates it, finds no tracked baseline to diff against, and goes green. The generated file MUST land in the SAME commit as the script change.
+**How I hit it:** booking L3 — added `booking.gen.ts` and chained it into `gen:api`; code-reviewer flagged that until the new file is tracked, the drift-check has no teeth. Fixed by staging `booking.gen.ts` as tracked so the first CI run actually compares.
+**Why it matters / where it transfers:** A diff-based gate is only as strong as what git is watching — untracked = invisible = silently green. Any "regenerate and assert no diff" check must ship its baseline as a tracked file in the same commit, or the gate's first run is a no-op.
+
 ### 2026-07-16 — Design the migration path around the network topology
 **What I learned:** A Postgres on an internal-only network with no host port (ADR-0001) simply cannot be migrated from the host — the migrator has to run INSIDE the network (at service boot, via `docker compose run`, or `exec`). So `make migrate-booking` runs the drizzle-orm migrator in-container; it's the TS analogue of rates' Flyway-on-startup.
 **How I hit it:** booking L1 — booking-db has no published host port, so a host-run migrator can't reach it; I put the migrate step inside the compose network (`docker compose run --rm --no-deps booking-service node dist/db/migrate.js`) instead.
