@@ -5,7 +5,7 @@ OpenAPI 3 specs, written **before** implementation (L3 gate — see `docs/MASTER
 Specs:
 
 - `rates.openapi.yaml` — rates-service (landed at L2, ADR-0003; contract-first).
-- `booking.openapi.yaml` — _booking-service (arrives at L3/D7)._
+- `booking.openapi.yaml` — booking-service (landed at L2 alongside the routes; TS client generated at L3, contract-first).
 - `agent.openapi.yaml` — _agent-service (Phase 2)._
 
 ## Conventions (§5), enforced by the ruleset
@@ -26,4 +26,4 @@ pnpm lint             # spectral lint of *.openapi.yaml (fails on any warning)
 
 CI (`.github/workflows/ci.yml`, `contracts` job) additionally runs an **oasdiff** breaking-change check on PRs (each spec vs its version on the base branch; a brand-new spec with no base version is skipped).
 
-The generated TypeScript client lives with its consumer, not here: `client/src/api/rates.gen.ts`, produced by `pnpm --dir client gen:api` and drift-checked in CI.
+The generated TypeScript clients live with their consumer, not here: `client/src/api/rates.gen.ts` and `client/src/api/booking.gen.ts`, both produced by `pnpm --dir client gen:api` and drift-checked in CI (`git diff --exit-code src/api`). agent-service generates its own client from the same specs in Phase 2 — the spec in `contracts/` is the single source of truth; each consumer regenerates types from it.
