@@ -40,6 +40,16 @@ Format:
 
 ## Evals & Testing
 
+### 2026-07-16 — Idempotency short-circuits must precede business preconditions — and only integration tests prove it
+**What I learned:** A replay of an `Idempotency-Key` must return the original result BEFORE any business precondition runs, because on replay the world has already moved on — the quote that was HELD is now CONSUMED, so a precondition check runs first would reject a valid replay. Unit tests can't see this; you have to exercise the real replay against a real DB.
+**How I hit it:** booking L2 — running the Testcontainers IT (not just unit + typecheck) surfaced a create-idempotency bug: the quote-HELD precondition ran ahead of the idempotency short-circuit, so replaying a consumed key errored instead of returning the original booking.
+**Why it matters / where it transfers:** Idempotency is an ordering property, not just a unique constraint — the replay path must bypass state that the first write legitimately changed. Integration tests earn their cost by catching ordering bugs unit tests structurally cannot.
+
+### 2026-07-16 — A "single enforcement point" is only as good as its from×to test matrix
+**What I learned:** Claiming one class is the single place a state transition can happen is a claim you have to prove exhaustively: the full N×N matrix of every legal AND illegal (from, to) pair, plus null-birth (INITIAL) and every terminal state. Anything less and an illegal edge can slip through unasserted.
+**How I hit it:** booking L2 `BookingStateMachine` — 49 pure unit tests cover the complete 6×6 transition matrix + birth + terminal, so "invalid transition = typed 409" is proven for every pair, not just the happy path.
+**Why it matters / where it transfers:** Invariant-enforcing code needs invariant-shaped tests — enumerate the whole space, don't sample it. Same discipline as testing every branch of a validator, not just the one the feature uses.
+
 ### 2026-07-15 — A mocked-network E2E only stays honest if its fixtures are typed against the contract
 **What I learned:** A Playwright happy-path that mocks the network is only trustworthy if the mock fixtures are TYPED against the generated contract (`rates.gen.ts`) — then any contract drift breaks the test at compile time (tsc), not silently at runtime. Untyped JSON fixtures will happily lie about matching the real API.
 **How I hit it:** L4 rates-half E2E — I typed the mocked responses against the L3-generated types so the fake network can't drift from the spec without breaking the build.
@@ -51,6 +61,11 @@ Format:
 **Why it matters / where it transfers:** A linter/eval/guard is itself untested code — same failure class as a weak eval that passes a stub. If a rule protects an invariant, prove the rule can still fail on a known-bad input.
 
 ## Data & Domain (freight, Postgres, money/date handling)
+
+### 2026-07-16 — Race-safe idempotency needs three layers, not just a UNIQUE index
+**What I learned:** A same-key double-submit can fail at a DIFFERENT point than the `UNIQUE(idempotency_key)` index. Under `FOR UPDATE` serialization the concurrent LOSER gets past the insert race but then hits a DOWNSTREAM consumed-state conflict (the winner already CONSUMED the quote), not a `23505`. So race-safe idempotency = fast pre-SELECT + constraint catch (`23505`) + re-check the key on the downstream state conflict too.
+**How I hit it:** booking L2 — the concurrent same-key create returned 409 instead of replaying the original, because the loser tripped the quote-HELD precondition before the unique-violation path. Proven with truly-concurrent promises (`Promise.all`, no awaiting the first).
+**Why it matters / where it transfers:** Concurrency bugs hide behind serialization — the loser can surface anywhere downstream of the lock, so every conflict path has to fall back to "replay the original," and you only prove it with genuinely-parallel requests.
 
 ### 2026-07-16 — Pin ORM column modes so internal types stay honest
 **What I learned:** Drizzle lets you pin a column's JS mode — `bigint` cents as `mode:'bigint'`, timestamptz as `mode:'date'` (→ Date), `char(3)` currency snapshotted with no default. Pinning at the schema layer keeps the internal representation honest and pushes ISO-string / number coercion out to the boundaries only.
