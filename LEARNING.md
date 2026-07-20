@@ -62,6 +62,11 @@ Format:
 
 ## Data & Domain (freight, Postgres, money/date handling)
 
+### 2026-07-20 — The UI is an orchestrator/courier, not a rule engine
+**What I learned:** The client's job in the booking flow is to FORWARD server-owned data verbatim, not to re-derive or re-validate it: pass the rates-owned `(lane_id, rate_card_id)` pair plus breakdown/total/currency straight into booking, hardcode `actor = "user"` so privilege can't be forged, and treat the server's typed 409 as authoritative instead of pre-checking the §2.4 state machine client-side.
+**How I hit it:** L4 PR-B — BookingPanel couriers the rates `QuoteResponse` into booking `POST /quotes → hold → createBooking`; BookingDetailView surfaces confirm/cancel 409 vetoes verbatim. This is the same ORCHESTRATOR role (§6.2) the agent plays in Phase 2, which is why the agent reuses the public APIs with no privileged path.
+**Why it matters / where it transfers:** A UI that re-derives a price, forges an actor, or pre-enforces transitions becomes a second source of truth that can disagree with the service — keep authority server-side and the client stays a thin, honest courier the audit trail can trust.
+
 ### 2026-07-19 — Adding a REQUIRED field to a response is non-breaking; source a forwarded ID pair from one aggregate
 **What I learned:** Required-field compatibility is asymmetric between request and response: adding a required property to a RESPONSE is backward-compatible (consumers only GAIN a guaranteed field), whereas adding one to a REQUEST breaks existing callers. oasdiff `breaking --fail-on ERR` vs origin/main confirmed exit 0. And when a consumer must forward a `(rate_card_id, lane_id)` pair across a service boundary, source both halves from the SAME aggregate (`card.id()` / `card.laneId()`) so the pair cannot diverge by construction.
 **How I hit it:** L4 PR-A — booking-service's `POST /quotes` requires `lane_id`, but the rates `QuoteResponse` didn't expose it, so the client couldn't assemble a booking quote without inventing rates-owned data (§2.2). Fix: rates emits `lane_id` from `card.laneId()` (same aggregate as the card id it already returns) — additive and provably non-breaking.

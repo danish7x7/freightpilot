@@ -11,3 +11,12 @@ export function formatMoney(cents: number, currency: string): string {
 export function formatTransit(minDays: number, maxDays: number): string {
   return minDays === maxDays ? `${minDays} days` : `${minDays}–${maxDays} days`;
 }
+
+/** Render a server ISO-8601 instant (e.g. a booking_events `at`) for display only. */
+export function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  // A malformed instant would make Intl.format throw a RangeError and blank the timeline;
+  // fall back to the raw value instead (server is trusted, but don't crash render on bad data).
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
