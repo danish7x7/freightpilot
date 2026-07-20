@@ -2,11 +2,13 @@ import { useState } from "react";
 import { SearchForm, type SearchSubmission } from "./components/SearchForm";
 import { QuoteList } from "./components/QuoteList";
 import { QuoteBreakdown } from "./components/QuoteBreakdown";
+import { BookingPanel } from "./components/BookingPanel";
 import { useRateSearch, useQuote, type RateCardView } from "./api/hooks";
 
-// Orchestrates the rates-only manual flow: search → sortable list → quote breakdown.
-// Booking (book action, detail, event timeline) is deferred until booking-service exists
-// — see ADR-0004. There is intentionally no "book" button here.
+// Orchestrates the full manual flow: search → sortable list → quote breakdown → book → booking
+// detail w/ event timeline. The rates half calls rates-service; the booking half (BookingPanel)
+// calls booking-service's public API only (§2.2). ADR-0004 deferred the booking half until
+// booking-service existed; it now does, so the "book" action lives here.
 export function RatesPage() {
   const [submission, setSubmission] = useState<SearchSubmission | null>(null);
   const [selected, setSelected] = useState<RateCardView | null>(null);
@@ -22,7 +24,7 @@ export function RatesPage() {
   return (
     <main>
       <h1>FreightPilot</h1>
-      <p>Search freight rates and get a full quote. (Booking arrives in a later layer.)</p>
+      <p>Search freight rates, get a full quote, and book it.</p>
 
       <SearchForm onSearch={handleSearch} />
 
@@ -36,7 +38,14 @@ export function RatesPage() {
         <>
           {quote.isLoading && <p>Calculating quote…</p>}
           {quote.isError && <p role="alert">Quote failed: {quote.error.message}</p>}
-          {quote.data && <QuoteBreakdown quote={quote.data} />}
+          {quote.data && submission && (
+            <>
+              <QuoteBreakdown quote={quote.data} />
+              {/* Keyed on the card so switching cards remounts the panel with a fresh
+                  idempotency key (a new booking attempt), not a stale one. */}
+              <BookingPanel key={selected.id} quote={quote.data} shipment={submission.shipment} />
+            </>
+          )}
         </>
       )}
     </main>
