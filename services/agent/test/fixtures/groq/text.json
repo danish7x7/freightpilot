@@ -1,0 +1,16 @@
+{
+  "status": 200,
+  "body": {
+    "id": "chatcmpl-groq-text",
+    "object": "chat.completion",
+    "model": "llama-3.3-70b-versatile",
+    "choices": [
+      {
+        "index": 0,
+        "message": { "role": "assistant", "content": "The quick brown fox." },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": { "prompt_tokens": 11, "completion_tokens": 5, "total_tokens": 16 }
+  }
+}

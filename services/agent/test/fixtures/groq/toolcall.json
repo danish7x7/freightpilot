@@ -1,0 +1,29 @@
+{
+  "status": 200,
+  "body": {
+    "id": "chatcmpl-groq-tool",
+    "object": "chat.completion",
+    "model": "llama-3.3-70b-versatile",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "call_groq_abc",
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "arguments": "{\"city\":\"Berlin\"}"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls"
+      }
+    ],
+    "usage": { "prompt_tokens": 18, "completion_tokens": 9, "total_tokens": 27 }
+  }
+}
