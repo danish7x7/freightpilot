@@ -38,7 +38,22 @@ Format:
 
 ## LLM Engineering (providers, tool calling, prompts)
 
+### 2026-07-20 — Fall back only on a retryable allowlist, and drive it from ONE classifier set
+**What I learned:** In a multi-provider LLM chain the router must advance to the next provider ONLY on a retryable allowlist (429 / 5xx / timeout / network); every other 4xx and any malformed 200 has to be rethrown as a typed bug, never masked by falling through. And the SAME `RETRYABLE` set drives both `LlmError.retryable` and the router's fallback decision, so "what we classify as retryable" and "what we actually retry" cannot drift.
+**How I hit it:** agent L1 adapter (§6.1) — GeminiProvider + one reused OpenAiCompatProvider behind an `LLM_CHAIN` router; code-reviewer's gap tests then proved malformed-200 and 4xx do NOT advance while 5xx/timeout/network do.
+**Why it matters / where it transfers:** A fallback path is a great place to hide a real bug — if a bad request or a malformed success quietly rolls to the next provider, a loud failure becomes a silent one. Any retry/fallback wrapper needs one source of truth for "retryable" and a hard rethrow for everything else.
+
+### 2026-07-20 — Pin provider base URLs in code; let env supply only model/key/RPM
+**What I learned:** For a config-driven provider chain, keep the base URLs in a code-side registry and read only model id, API key, and RPM from env (I parse `LLM_CHAIN` as `provider:model` pairs). If the host itself came from env you'd have an SSRF / host-injection surface — point "the LLM" at anything. One `OpenAiCompatProvider` class then serves both Groq and Cerebras: same OpenAI-compatible wire shape, differing only by pinned base URL + model + key.
+**How I hit it:** agent L1 config (zod-validated `src/llm/config.ts`); security-reviewer PASS, its one informational note applied (`encodeURIComponent` the Gemini model in the URL path).
+**Why it matters / where it transfers:** Config flexibility and attack surface are the same axis — everything read from env is something an operator or attacker can point elsewhere. Pin the security-relevant parts (hosts) in code; vary only the benign parts.
+
 ## Evals & Testing
+
+### 2026-07-20 — Mock at the HTTP boundary, not the provider seam, to keep the whole adapter under test
+**What I learned:** Record/replay for an LLM adapter should intercept at the HTTP boundary (undici `MockAgent`), NOT at the `LlmProvider` interface — that way the real normalization, error classifier, and router all run against recorded provider bytes. Mocking the provider seam would test only the router and leave the parsing/classifying (the parts most likely to be wrong) unexercised. `disableNetConnect()` guarantees zero live calls in CI, and the env-gated recorder lives OUTSIDE the vitest glob so it can't fire during a normal run.
+**How I hit it:** agent L1 harness — 26 tests replay Gemini/Groq/Cerebras fixtures at the fetch layer (no SDK to mock past); using raw `fetch` is what makes the HTTP boundary the natural, replayable seam.
+**Why it matters / where it transfers:** Put the seam of your fake BELOW the code you're actually testing — mock too high and the test passes without exercising the logic that matters. Same reason the mocked-network E2E fixtures are typed against the contract instead of mocking the client.
 
 ### 2026-07-16 — Idempotency short-circuits must precede business preconditions — and only integration tests prove it
 **What I learned:** A replay of an `Idempotency-Key` must return the original result BEFORE any business precondition runs, because on replay the world has already moved on — the quote that was HELD is now CONSUMED, so a precondition check runs first would reject a valid replay. Unit tests can't see this; you have to exercise the real replay against a real DB.
