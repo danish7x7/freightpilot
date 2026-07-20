@@ -99,10 +99,12 @@ export interface components {
             /** Format: int64 */
             amount_cents: number;
         };
-        /** @description Cross-service contract — booking snapshots `breakdown`/`total_cents` into quotes.breakdown JSONB (§4.2). The breakdown lines sum exactly to total_cents. */
+        /** @description Cross-service contract — booking snapshots `breakdown`/`total_cents` into quotes.breakdown JSONB (§4.2). The breakdown lines sum exactly to total_cents. `lane_id` + `rate_card_id` are the pair the orchestrator (client, later the agent) forwards verbatim into booking's POST /quotes; both are derived server-side from the quoted rate card so they cannot diverge — the caller never asserts lane_id itself. */
         QuoteResponse: {
             /** Format: uuid */
             rate_card_id: string;
+            /** Format: uuid */
+            lane_id: string;
             origin_code: string;
             dest_code: string;
             mode: components["schemas"]["Mode"];

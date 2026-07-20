@@ -13,6 +13,7 @@ import java.util.UUID;
  */
 public record QuoteResponse(
         UUID rateCardId,
+        UUID laneId,
         String originCode,
         String destCode,
         Mode mode,
@@ -27,9 +28,12 @@ public record QuoteResponse(
         var card = quote.detail().card();
         var lane = quote.detail().lane();
         var result = quote.result();
+        // lane_id comes from the rate card's own FK (card.laneId()), not lane.id() — so the
+        // emitted (rate_card_id, lane_id) pair is sourced from one aggregate and cannot diverge.
+        // The client forwards this pair verbatim into booking's POST /quotes (guardian PR-A ruling).
         return new QuoteResponse(
-                card.id(), lane.originCode(), lane.destCode(), lane.mode(), result.currency(),
-                result.baseCostCents(), result.breakdown(), result.totalCents(),
+                card.id(), card.laneId(), lane.originCode(), lane.destCode(), lane.mode(),
+                result.currency(), result.baseCostCents(), result.breakdown(), result.totalCents(),
                 result.transitDaysMin(), result.transitDaysMax());
     }
 }

@@ -21,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 class QuoteApiIT extends PostgresITBase {
 
     private static final String OCEAN_CARD = "22222222-2222-2222-2222-000000000001";
+    private static final String OCEAN_LANE = "11111111-1111-1111-1111-000000000001";
     private static final String AIR_CARD = "22222222-2222-2222-2222-000000000016";
     private static final String TRUCK_CARD = "22222222-2222-2222-2222-000000000021";
     private static final String MISSING_CARD = "22222222-2222-2222-2222-000000009999";
@@ -59,6 +60,10 @@ class QuoteApiIT extends PostgresITBase {
         assertThat(((Number) JsonPath.read(body, "$.total_cents")).longValue()).isEqualTo(366_540L);
         assertThat((List<?>) JsonPath.read(body, "$.breakdown")).hasSize(4);
         assertThat((String) JsonPath.read(body, "$.mode")).isEqualTo("OCEAN");
+        // lane_id is emitted from the quoted card's own FK (card.laneId()) so the (rate_card_id,
+        // lane_id) pair the client forwards into booking cannot diverge. Card …001 is on lane …001.
+        assertThat((String) JsonPath.read(body, "$.rate_card_id")).isEqualTo(OCEAN_CARD);
+        assertThat((String) JsonPath.read(body, "$.lane_id")).isEqualTo(OCEAN_LANE);
     }
 
     @Test

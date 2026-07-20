@@ -44,6 +44,9 @@ export const rateCards: RateCardView[] = [
 
 export const quote: QuoteResponse = {
   rate_card_id: "11111111-1111-1111-1111-111111111111",
+  // lane_id is emitted by rates alongside rate_card_id (same rate-card aggregate) and forwarded
+  // verbatim into booking's POST /quotes — see the booking-flow E2E. Fixed here so drift breaks tsc.
+  lane_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
   origin_code: "CNSHA",
   dest_code: "USOAK",
   mode: "OCEAN",
