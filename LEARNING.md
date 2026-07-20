@@ -62,6 +62,11 @@ Format:
 
 ## Data & Domain (freight, Postgres, money/date handling)
 
+### 2026-07-19 — Adding a REQUIRED field to a response is non-breaking; source a forwarded ID pair from one aggregate
+**What I learned:** Required-field compatibility is asymmetric between request and response: adding a required property to a RESPONSE is backward-compatible (consumers only GAIN a guaranteed field), whereas adding one to a REQUEST breaks existing callers. oasdiff `breaking --fail-on ERR` vs origin/main confirmed exit 0. And when a consumer must forward a `(rate_card_id, lane_id)` pair across a service boundary, source both halves from the SAME aggregate (`card.id()` / `card.laneId()`) so the pair cannot diverge by construction.
+**How I hit it:** L4 PR-A — booking-service's `POST /quotes` requires `lane_id`, but the rates `QuoteResponse` didn't expose it, so the client couldn't assemble a booking quote without inventing rates-owned data (§2.2). Fix: rates emits `lane_id` from `card.laneId()` (same aggregate as the card id it already returns) — additive and provably non-breaking.
+**Why it matters / where it transfers:** Contract evolution has a request/response asymmetry worth saying out loud in a design review — an additive required RESPONSE field is safe, an additive required REQUEST field is a version bump. And a forwarded compound key is only trustworthy if its parts share one source of truth, or the two halves can drift apart later.
+
 ### 2026-07-16 — Race-safe idempotency needs three layers, not just a UNIQUE index
 **What I learned:** A same-key double-submit can fail at a DIFFERENT point than the `UNIQUE(idempotency_key)` index. Under `FOR UPDATE` serialization the concurrent LOSER gets past the insert race but then hits a DOWNSTREAM consumed-state conflict (the winner already CONSUMED the quote), not a `23505`. So race-safe idempotency = fast pre-SELECT + constraint catch (`23505`) + re-check the key on the downstream state conflict too.
 **How I hit it:** booking L2 — the concurrent same-key create returned 409 instead of replaying the original, because the loser tripped the quote-HELD precondition before the unique-violation path. Proven with truly-concurrent promises (`Promise.all`, no awaiting the first).
