@@ -38,6 +38,11 @@ Format:
 
 ## LLM Engineering (providers, tool calling, prompts)
 
+### 2026-07-21 — Enforce "no path from LLM output to execution" by withholding the capability, not guarding it
+**What I learned:** The strongest way to enforce §6.3's "no code path from LLM output to booking execution" isn't a runtime check the gate flips — it's WITHHOLDING the HTTP client from the propose path: `create_booking.execute` OMITS the `clients` param and returns inert, JSON-serializable data, so it STRUCTURALLY cannot reach `POST /bookings`. You can't misuse a capability you were never handed. A `ToolExecution` discriminated union (`service_result | proposal`) makes it a TYPE-LEVEL seam, and the proposal carries null slots (Idempotency-Key, bookingId) the L3 gate fills — the integration point is visible to the compiler.
+**How I hit it:** agent L2 tool loop (ADR-0008) — guardian required the propose-only seam; I proved it with a STRUCTURAL test asserting proposing issues ZERO HTTP calls (pendingInterceptors stay unconsumed under `disableNetConnect` + JSON round-trip purity), not just an assertion about behavior.
+**Why it matters / where it transfers:** Capability-withholding turns a security rule into a fact of the call graph and the type system — same family as making an invalid state transition a type error. Prove the negative (zero calls), don't just assert the positive.
+
 ### 2026-07-20 — Fall back only on a retryable allowlist, and drive it from ONE classifier set
 **What I learned:** In a multi-provider LLM chain the router must advance to the next provider ONLY on a retryable allowlist (429 / 5xx / timeout / network); every other 4xx and any malformed 200 has to be rethrown as a typed bug, never masked by falling through. And the SAME `RETRYABLE` set drives both `LlmError.retryable` and the router's fallback decision, so "what we classify as retryable" and "what we actually retry" cannot drift.
 **How I hit it:** agent L1 adapter (§6.1) — GeminiProvider + one reused OpenAiCompatProvider behind an `LLM_CHAIN` router; code-reviewer's gap tests then proved malformed-200 and 4xx do NOT advance while 5xx/timeout/network do.
@@ -133,6 +138,11 @@ Format:
 **Why it matters / where it transfers:** Mixing seed into migrations makes a data typo fail app startup and lets IDs churn. Separating schema-lifecycle from data-lifecycle keeps migration history honest and cross-service references stable.
 
 ## Ops (Docker, CI/CD, AWS, observability)
+
+### 2026-07-21 — A regen-diff drift gate in a build matrix must be SCOPED to the service that generates
+**What I learned:** A shared "run gen + `git diff --exit-code`" CI step is wrong inside a per-service matrix for any service that has no generator — it either fails (no `gen:api` script) or silently over-claims coverage. The fix is to gate the step on the generating service (`if: matrix.service == 'agent'`) instead of hanging it on the shared build step, and to correct any header comment that claims broader coverage than the gate actually has.
+**How I hit it:** agent L2 — added an agent-scoped drift gate for the newly-committed generated rates/booking clients; booking has no `gen:api`, so the check had to be agent-only, and the ci.yml comment previously over-claimed a drift check that only ever covered the client.
+**Why it matters / where it transfers:** A CI gate's comment is a claim about what it protects, and a matrix multiplies that claim across services that may not qualify — scope the gate to where the invariant actually applies and keep the comment honest, because an over-claiming green check is worse than no check.
 
 ### 2026-07-16 — `git diff --exit-code` only gates TRACKED files — a new generated client is toothless until committed
 **What I learned:** The regen-then-diff CI pattern (`pnpm gen:api && git diff --exit-code src/api`) proves the checked-in client matches the spec — but `git diff` ignores UNTRACKED files. So a brand-new generated file passes trivially until it's `git add`-ed: CI regenerates it, finds no tracked baseline to diff against, and goes green. The generated file MUST land in the SAME commit as the script change.
