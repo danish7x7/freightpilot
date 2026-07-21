@@ -7,7 +7,9 @@ on:
   pull_request:
 
 # lint/typecheck/test per service, plus the L3 contract gate (spectral lint +
-# oasdiff breaking-change check + generated-client drift check). Eval gate lands at L6 (§9).
+# oasdiff breaking-change check + generated-client drift check). The drift check covers BOTH
+# the client (client/src/api) and the agent (services/agent/src/api) — each regenerates its
+# committed clients from contracts/*.yaml and fails on any diff. Eval gate lands at L6 (§9).
 jobs:
   node-services:
     name: node · ${{ matrix.service }}
@@ -36,6 +38,16 @@ jobs:
       # Exercises the tsc emit (e.g. booking's dist/db/migrate.js, which make
       # migrate-booking runs in-container) — typecheck is noEmit and wouldn't catch it.
       - run: pnpm build
+      # L2 DoD (agent only — booking has no gen:api): the agent's API clients are generated
+      # in CI and must match the committed contracts. Guards against a committed client
+      # drifting from contracts/*.yaml (Phase 1's lesson: a committed client without a drift
+      # check is a toothless guarantee). Mirrors the client job's drift gate below.
+      - name: Regenerate agent API clients from contracts
+        if: matrix.service == 'agent'
+        run: pnpm gen:api
+      - name: Fail if the generated agent clients drifted from the contracts
+        if: matrix.service == 'agent'
+        run: git diff --exit-code src/api
 
   client:
     name: node · client
