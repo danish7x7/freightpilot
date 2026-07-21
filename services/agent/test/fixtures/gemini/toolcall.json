@@ -4,23 +4,24 @@
     "candidates": [
       {
         "content": {
-          "role": "model",
           "parts": [
             {
               "functionCall": {
                 "name": "get_weather",
-                "args": { "city": "Berlin" }
+                "args": {
+                  "city": "Berlin"
+                }
               }
             }
-          ]
+          ],
+          "role": "model"
         },
         "finishReason": "STOP"
       }
     ],
     "usageMetadata": {
-      "promptTokenCount": 20,
-      "candidatesTokenCount": 8,
-      "totalTokenCount": 28
+      "promptTokenCount": 70,
+      "candidatesTokenCount": 16
     }
   }
 }

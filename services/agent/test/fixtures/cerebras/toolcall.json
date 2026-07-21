@@ -1,19 +1,14 @@
 {
   "status": 200,
   "body": {
-    "id": "chatcmpl-cerebras-tool",
-    "object": "chat.completion",
-    "model": "llama-3.3-70b",
     "choices": [
       {
-        "index": 0,
         "message": {
-          "role": "assistant",
           "content": null,
+          "role": "assistant",
           "tool_calls": [
             {
               "id": "call_cerebras_xyz",
-              "type": "function",
               "function": {
                 "name": "get_weather",
                 "arguments": "{\"city\":\"Berlin\"}"
@@ -24,6 +19,9 @@
         "finish_reason": "tool_calls"
       }
     ],
-    "usage": { "prompt_tokens": 17, "completion_tokens": 8, "total_tokens": 25 }
+    "usage": {
+      "prompt_tokens": 17,
+      "completion_tokens": 8
+    }
   }
 }

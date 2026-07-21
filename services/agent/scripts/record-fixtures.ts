@@ -13,12 +13,18 @@
  *
  * Requires real keys in the environment (services/agent/.env — gitignored). Only the
  * response BODY + status is written; request auth headers/keys are never persisted.
+ *
+ * Success bodies are SANITIZED before writing (sanitizeBody): we keep only the fields
+ * the adapter's normalizer actually reads and drop everything else. This matters for
+ * more than tidiness — Gemini thinking models return an encrypted `thoughtSignature`
+ * reasoning blob the adapter never consumes, and its base64 content trips secret
+ * scanners as a false positive. Stripping it keeps committed fixtures minimal + clean.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadLlmConfig } from "../src/llm/config.js";
-import { createProvider } from "../src/llm/index.js";
+import { createProvider, loadLlmConfig } from "../src/llm/index.js";
+import type { ProviderKind, ResolvedProvider } from "../src/llm/index.js";
 import { TEXT_REQUEST, TOOLCALL_REQUEST } from "../test/fixtures/throwawayTool.js";
 
 if (process.env.RECORD_FIXTURES !== "1") {
@@ -38,14 +44,117 @@ globalThis.fetch = async (input, init) => {
   return res;
 };
 
-function write(provider: string, name: string): void {
-  if (!captured) throw new Error(`no response captured for ${provider}/${name}`);
-  const dir = join(fixturesDir, provider);
+function write(pc: ResolvedProvider, name: string): void {
+  if (!captured) throw new Error(`no response captured for ${pc.name}/${name}`);
+  // Only 2xx bodies are normalized (and thus sanitized); error bodies are read only for
+  // their status, so pass them through untouched.
+  const isSuccess = captured.status >= 200 && captured.status < 300;
+  const body = isSuccess ? sanitizeBody(pc.kind, captured.body) : captured.body;
+  const dir = join(fixturesDir, pc.name);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${name}.json`), JSON.stringify(captured, null, 2) + "\n");
-  console.log(`recorded ${provider}/${name}.json (status ${captured.status})`);
+  writeFileSync(join(dir, `${name}.json`), JSON.stringify({ status: captured.status, body }, null, 2) + "\n");
+  console.log(`recorded ${pc.name}/${name}.json (status ${captured.status})`);
   captured = null;
 }
+
+// ---- Sanitizers: keep ONLY what each normalizer reads (see src/llm/*Provider.ts) ----
+
+function sanitizeBody(kind: ProviderKind, body: unknown): unknown {
+  return kind === "gemini"
+    ? sanitizeGemini(body as GeminiWireBody)
+    : sanitizeOpenAiCompat(body as OpenAiWireBody);
+}
+
+/** Gemini: keep candidates[].content.{parts(text|functionCall), role}, finishReason, usageMetadata token counts. */
+function sanitizeGemini(body: GeminiWireBody) {
+  const candidates = (body.candidates ?? []).map((c) => {
+    const parts = (c.content?.parts ?? []).map((p): GeminiPart => {
+      if (typeof p.text === "string") return { text: p.text };
+      if (p.functionCall) {
+        // Note: functionCall.id is dropped — the adapter synthesizes its own per-response id.
+        return { functionCall: { name: p.functionCall.name, args: p.functionCall.args } };
+      }
+      return {};
+    });
+    const content: GeminiContent = { parts };
+    if (c.content?.role !== undefined) content.role = c.content.role;
+    const out: GeminiCandidate = { content };
+    if (c.finishReason !== undefined) out.finishReason = c.finishReason;
+    return out;
+  });
+  return {
+    candidates,
+    usageMetadata: {
+      promptTokenCount: body.usageMetadata?.promptTokenCount,
+      candidatesTokenCount: body.usageMetadata?.candidatesTokenCount,
+    },
+  };
+}
+
+/** OpenAI-schema (Groq/Cerebras): keep choices[].message.{role, content, tool_calls{id,function}}, finish_reason, usage token counts. */
+function sanitizeOpenAiCompat(body: OpenAiWireBody) {
+  const choices = (body.choices ?? []).map((ch) => {
+    const m = ch.message ?? {};
+    const message: OpenAiMessage = { content: m.content ?? null };
+    if (m.role !== undefined) message.role = m.role;
+    if (Array.isArray(m.tool_calls)) {
+      message.tool_calls = m.tool_calls.map((tc) => ({
+        id: tc.id,
+        function: { name: tc.function?.name, arguments: tc.function?.arguments },
+      }));
+    }
+    const out: OpenAiChoice = { message };
+    if (ch.finish_reason !== undefined) out.finish_reason = ch.finish_reason;
+    return out;
+  });
+  return {
+    choices,
+    usage: {
+      prompt_tokens: body.usage?.prompt_tokens,
+      completion_tokens: body.usage?.completion_tokens,
+    },
+  };
+}
+
+// Structural views of the wire bodies — mirror the normalizers' reads.
+interface GeminiPart {
+  text?: string;
+  functionCall?: { name?: string; args?: unknown };
+}
+interface GeminiContent {
+  parts: GeminiPart[];
+  role?: string;
+}
+interface GeminiCandidate {
+  content: GeminiContent;
+  finishReason?: string;
+}
+interface GeminiWireBody {
+  candidates?: { content?: { role?: string; parts?: GeminiPart[] }; finishReason?: string }[];
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+}
+interface OpenAiToolCall {
+  id?: string;
+  function?: { name?: string; arguments?: string };
+}
+interface OpenAiMessage {
+  role?: string;
+  content: string | null;
+  tool_calls?: OpenAiToolCall[];
+}
+interface OpenAiChoice {
+  message: OpenAiMessage;
+  finish_reason?: string;
+}
+interface OpenAiWireBody {
+  choices?: {
+    message?: { role?: string; content?: string | null; tool_calls?: OpenAiToolCall[] };
+    finish_reason?: string;
+  }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
+// ---- Record loop ----
 
 const config = loadLlmConfig();
 for (const pc of config.chain) {
@@ -53,13 +162,13 @@ for (const pc of config.chain) {
   console.log(`\n== ${pc.name} (${pc.model}) ==`);
   try {
     await provider.chat(TEXT_REQUEST);
-    write(pc.name, "text");
+    write(pc, "text");
   } catch (err) {
     console.error(`  text case failed:`, err);
   }
   try {
     await provider.chat(TOOLCALL_REQUEST);
-    write(pc.name, "toolcall");
+    write(pc, "toolcall");
   } catch (err) {
     console.error(`  toolcall case failed:`, err);
   }
