@@ -38,6 +38,11 @@ Format:
 
 ## LLM Engineering (providers, tool calling, prompts)
 
+### 2026-07-21 — A click-gated agent action: bind the token to a server-owned proposal, and spend it before it leaves the process
+**What I learned:** For a confirmation gate where auth is a Non-Goal, possession of the token IS the authorization — so unguessability is a DO-NOW requirement (256-bit crypto-random), not a deferred nicety. The redeem call carries ONLY an opaque token that keys a SERVER-AUTHORITATIVE stored proposal; the client never resends booking params, so a token authorizes THIS booking, not "a booking," and can't be replayed against another. The single-use claim marks the row `consumed` BEFORE the token is transmitted downstream (reused as the booking Idempotency-Key), so any leaked copy is already spent — and the secret is masked out of access logs, with a separate non-secret `id` carrying provenance into `booking_events`.
+**How I hit it:** agent L3 confirmation gate (ADR-0009, §6.3.2) — security-reviewer PASS WITH NOTES; code-reviewer caught the raw token leaking into Fastify's access log via `req.url` (Blocking) → fixed with a token-masking req serializer + regression test.
+**Why it matters / where it transfers:** When possession = authorization, the credential must name exactly one server-owned thing, be spendable once, and never touch a log — the same discipline as a signed one-time capability URL. Bind the token to server-owned state so the client can't widen what it authorizes.
+
 ### 2026-07-21 — Enforce "no path from LLM output to execution" by withholding the capability, not guarding it
 **What I learned:** The strongest way to enforce §6.3's "no code path from LLM output to booking execution" isn't a runtime check the gate flips — it's WITHHOLDING the HTTP client from the propose path: `create_booking.execute` OMITS the `clients` param and returns inert, JSON-serializable data, so it STRUCTURALLY cannot reach `POST /bookings`. You can't misuse a capability you were never handed. A `ToolExecution` discriminated union (`service_result | proposal`) makes it a TYPE-LEVEL seam, and the proposal carries null slots (Idempotency-Key, bookingId) the L3 gate fills — the integration point is visible to the compiler.
 **How I hit it:** agent L2 tool loop (ADR-0008) — guardian required the propose-only seam; I proved it with a STRUCTURAL test asserting proposing issues ZERO HTTP calls (pendingInterceptors stay unconsumed under `disableNetConnect` + JSON round-trip purity), not just an assertion about behavior.
@@ -91,6 +96,11 @@ Format:
 **Why it matters / where it transfers:** A linter/eval/guard is itself untested code — same failure class as a weak eval that passes a stub. If a rule protects an invariant, prove the rule can still fail on a known-bad input.
 
 ## Data & Domain (freight, Postgres, money/date handling)
+
+### 2026-07-21 — Idempotent create + NON-idempotent confirm ⇒ recover by READ, and the single-use claim is mandatory
+**What I learned:** In a two-call execution where create is idempotent on an `Idempotency-Key` (first-write-wins) but confirm is NOT (CONFIRMED→CONFIRMED is an illegal 409, not a no-op), recovery from a lost ack must be reconcile-by-READ — GET the booking, treat CONFIRMED as success (the ack was merely lost), retry only while still HELD (bounded) — NEVER a blind re-POST that reads the 409 as failure and re-executes. That asymmetry is exactly WHY a single-use claim (transactional `UPDATE...WHERE status='pending' RETURNING`) is REQUIRED, not belt-and-suspenders: a second execution's confirm would 409 on an already-CONFIRMED booking.
+**How I hit it:** agent L3 confirmation gate (ADR-0009); verified the asymmetry against booking-service's own `idempotency.it.test` (line 95: CONFIRMED→CONFIRMED = ILLEGAL_TRANSITION), and proved the single-use claim under REAL Postgres concurrency in a new Testcontainers suite.
+**Why it matters / where it transfers:** Idempotency is per-operation, not per-workflow — a pipeline can be safe to retry at step 1 and unsafe at step 2, so recovery has to reconcile by READING actual state, and "retry safely" often depends on a claim that makes at-most-once true by construction. Say it out loud: don't re-POST a non-idempotent step; read to learn whether it already happened.
 
 ### 2026-07-20 — The UI is an orchestrator/courier, not a rule engine
 **What I learned:** The client's job in the booking flow is to FORWARD server-owned data verbatim, not to re-derive or re-validate it: pass the rates-owned `(lane_id, rate_card_id)` pair plus breakdown/total/currency straight into booking, hardcode `actor = "user"` so privilege can't be forged, and treat the server's typed 409 as authoritative instead of pre-checking the §2.4 state machine client-side.

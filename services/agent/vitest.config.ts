@@ -6,6 +6,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
-    exclude: ["node_modules/**", "dist/**"],
+    // Testcontainers integration tests (*.it.test.ts) are excluded here (no Docker) and run
+    // via `pnpm test:integration` (see vitest.integration.config.ts).
+    exclude: ["**/*.it.test.ts", "node_modules/**", "dist/**"],
   },
 });

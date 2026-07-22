@@ -144,6 +144,30 @@ jobs:
       - name: Drizzle migration + schema integration test
         run: pnpm test:integration
 
+  agent-it:
+    name: node · agent integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: services/agent/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # L3 DoD: the confirmations migration applies to a real Postgres and the gate behaves —
+      # single-use claim under genuine concurrency, redeem execution + partial-failure recovery.
+      # Booking-service HTTP is mocked at the undici boundary; only Postgres is live. Unit tests
+      # (executor reconcile, token entropy, the loop→gate boundary) run in node-services.
+      - name: Confirmations gate integration test (Testcontainers)
+        run: pnpm test:integration
+
   contracts:
     name: contracts · lint + breaking-change
     runs-on: ubuntu-latest
