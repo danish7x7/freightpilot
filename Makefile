@@ -1,6 +1,6 @@
 # FreightPilot — top-level orchestration.
 # Prefer these targets over raw docker/compose commands (CLAUDE.md).
-.PHONY: up down restart ps logs seed migrate-booking test evals
+.PHONY: up down restart ps logs seed migrate-booking migrate-agent test evals
 
 COMPOSE ?= docker compose
 
@@ -39,6 +39,14 @@ migrate-booking:
 	@echo ">> applying booking migrations"
 	$(COMPOSE) run --rm --no-deps -T booking-service node dist/db/migrate.js
 	@echo "booking migrations applied."
+
+## migrate-agent: apply agent-service Drizzle migrations (the confirmations gate table).
+## Runs the migrator INSIDE the compose network because agent-db has no host port (ADR-0001);
+## requires `make up`. Mirrors migrate-booking.
+migrate-agent:
+	@echo ">> applying agent migrations"
+	$(COMPOSE) run --rm --no-deps -T agent-service node dist/db/migrate.js
+	@echo "agent migrations applied."
 
 ## test: run each service's hello-world test suite.
 test:
