@@ -1,135 +1,108 @@
 # FreightPilot
 
-FreightPilot is a microservices freight quoting and booking platform built with Java 21 / Spring Boot 3, TypeScript / Fastify, and React 18. The design intent is that an AI agent will quote and book shipments through the exact same public REST APIs a human uses, with an explicit human-confirmation gate before any booking executes. Development is contract-first (OpenAPI specs land before implementation) and every change is CI-gated: per-service unit tests, real-Postgres integration tests via Testcontainers, a contract drift check, and a hermetic Playwright end-to-end test all run on every push. Money is integer cents end to end, and each service owns its own database.
+An agentic freight quoting and booking platform where an AI agent quotes and books shipments through the same public REST APIs a human uses. No privileged agent path, no back door, and no booking that executes without an explicit human click.
 
-Honest status: **Phase 1 (the manual product) is built and CI-green.** A user can search lanes, calculate a quote with a full surcharge breakdown, book from that quote, and confirm or cancel, ending on a booking-detail view with an append-only event timeline. **Phase 2 (the agent layer) is in progress and not yet built:** agent-service is a health-check skeleton today, so the LLM provider adapter, the tool loop, and the confirmation gate described below are the design target, not shipped code. There is no AWS deployment and no public URL yet.
+> **Demo:** _(coming soon: a GIF walkthrough and a live URL will land here)_
 
-## System context
+## What makes this interesting
 
-```mermaid
-graph TB
-    U[Shipper - demo user] -->|manual UI + chat| C[React Client]
-    C -->|REST| G[nginx reverse proxy - planned]
-    G --> R[rates-service<br/>Java 21 / Spring Boot 3]
-    G --> B[booking-service<br/>TypeScript / Fastify]
-    G --> A[agent-service Phase 2<br/>TypeScript]
-    A -->|tools via REST| R
-    A -->|tools via REST| B
-    A --> L[LLM Provider Adapter Phase 2]
-    L -->|primary| P1[Gemini 2.5 Flash Phase 2]
-    L -->|fallback| P2[Groq llama-3.3-70b Phase 2]
-    L -->|eval runner| P3[Cerebras / GitHub Models Phase 2]
-    R --> D1[(Postgres: rates)]
-    B --> D2[(Postgres: bookings)]
-    A --> D3[(Postgres: conversations + telemetry)]
-```
+### "LLM proposes, never executes": the confirmation gate
 
-Caption: the `client` + `rates-service` + `booking-service` path is built and CI-green. agent-service, the LLM layer, and the nginx proxy are the Phase 2 / roadmap target. Today the client calls rates-service and booking-service directly via `VITE_RATES_URL` (:8080) and `VITE_BOOKING_URL` (:8081); nginx is not wired into Compose yet.
+The agent produces an INERT proposal. It literally cannot call the booking endpoints, because the `create_booking` tool's execute function is not even handed an HTTP client (ADR-0008, the propose-only seam). The only thing that triggers real execution is a crypto-random 256-bit single-use token, bound to a server-authoritative proposal stored in agent-service's own database, and it is redeemed by an explicit user click on `POST /api/v1/confirmations/:token` (ADR-0009, the gate). This is enforced STRUCTURALLY, not by discipline: the executor (the only code that issues the two real booking calls) is unreachable from the LLM tool loop, and a static import-graph test asserts that unreachability so a future loop bug cannot open a path to execution.
+
+### Process discipline
+
+Contracts come first. The OpenAPI specs in `contracts/*.openapi.yaml` generate the typed clients, and CI regenerates them and runs `git diff --exit-code` so a committed client can never silently drift from its contract. Every real decision gets an ADR in `docs/decisions/`. Each service owns its own Postgres, enforced at the Docker network layer (each database sits on a per-service `internal: true` network the other services cannot route to). CI also runs a Spectral contract lint (with a ruleset self-test) and an oasdiff breaking-change check on every pull request.
+
+### Provider-agnostic LLM layer at $0
+
+The LLM layer is hand-rolled `fetch` with no vendor SDKs (ADR-0006), which keeps one normalizer and one error classifier over the raw HTTP bytes and shrinks the dependency and attack surface. An ordered fallback chain fails over ONLY on an allowlist (429, 5xx, timeout, network), so a genuine bug is never masked as a provider outage. Record/replay fixture tests exercise the whole adapter with ZERO live provider calls in CI. The live-verified chain is primary `gemini:gemini-flash-latest`, fallback `groq:llama-3.3-70b-versatile`; Cerebras was dropped when its free tier turned paywalled (ADR-0007). Target LLM spend is $0 via free tiers.
 
 ## Architecture
 
-| Service | Stack | Owns | Status |
+Four services, each with its own stack and its own Postgres.
+
+| Service | Stack | Port | Owns |
 |---|---|---|---|
-| rates-service | Java 21, Spring Boot 3, Maven, Flyway, Postgres (:8080) | Lanes, rate cards, surcharges, quote calculation (strategy per mode) | Built, CI-green |
-| booking-service | TypeScript, Fastify, Drizzle, Postgres (:8081) | Quote holds, booking lifecycle state machine, append-only event log, idempotency | Built, CI-green |
-| agent-service | TypeScript, Fastify, Postgres (:8082) | NL intake, tool loop, provider adapter, confirmation gate, telemetry | Skeleton only (health check); Phase 2 |
-| client | React 18, Vite, TanStack Query | Manual flow, quote breakdown, booking detail, event timeline | Built, CI-green (agent chat panel is Phase 2) |
+| `services/rates` | Java 21, Spring Boot 3, Maven, Flyway | 8080 | Lanes, rate cards, surcharges, quote calculation (strategy per mode) |
+| `services/booking` | TypeScript, Fastify, Drizzle | 8081 | Quote holds, the booking lifecycle state machine (single enforcement point, illegal transition is a typed 409), append-only event log, idempotency |
+| `services/agent` | TypeScript, Fastify, Drizzle | 8082 | NL intake, the tool loop, the provider adapter, the confirmation gate (its DB currently holds the `confirmations` table; conversation history and telemetry are planned, not built) |
+| `client` | React 18, Vite, TanStack Query | | Manual flow, quote breakdown, booking detail, event timeline |
 
-Load-bearing rules (defended in ADRs, enforced in code):
+Money is integer cents end to end. Cross-service data flows through REST contracts only; there are no shared tables and no cross-service hard foreign keys.
 
-- **Each service owns its own database.** Cross-service data flows through REST contracts only. There are no shared tables and no cross-service hard foreign keys (they are FK-by-convention). Compose puts each Postgres on its own internal-only network reachable solely by its owning service, so the boundary is enforced by routing, not trust.
-- **The agent will consume the SAME public APIs as the UI** (design rule; agent not built). There is no privileged agent path. This keeps the audit trail (`actor=agent`) honest once the agent exists.
-- **Booking transitions are enforced in exactly one place.** `services/booking/src/domain/stateMachine.ts` is the single enforcement point; an illegal transition is a typed 409. Mutating booking state outside it is impossible by construction.
-- **Money is integer cents end to end.** No floating-point currency anywhere in the quote path.
+The Compose topology enforces database ownership by routing. There is a shared `backend` REST plane (no database is on it), plus `rates_db_net`, `booking_db_net`, and `agent_db_net`, each `internal: true` and attached ONLY to its owning service. agent-service is on `[backend, agent_db_net]`, so it reaches rates and booking over public REST on `backend` and can route to ONLY its own database, never theirs.
 
-Design decisions are recorded as ADRs under [`docs/decisions/`](docs/decisions/); the full plan lives in [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
+```mermaid
+graph TB
+    C[React Client]
 
-## Quick start
+    subgraph backend["backend (shared REST plane, no DB)"]
+      R[rates-service<br/>Java 21 / Spring Boot 3<br/>:8080]
+      B[booking-service<br/>TS / Fastify / Drizzle<br/>:8081]
+      A[agent-service<br/>TS / Fastify / Drizzle<br/>:8082]
+    end
 
-Requires Docker (with Compose), Node 22 + pnpm 9, and JDK 21 + Maven for the rates service.
+    L[Provider-agnostic LLM adapter]
+
+    C -->|REST| R
+    C -->|REST| B
+    C -->|chat| A
+    A -->|public REST only| R
+    A -->|public REST only| B
+    A --> L
+    L -->|primary| P1[gemini-flash-latest]
+    L -->|allowlist fallback| P2[groq llama-3.3-70b]
+
+    R -->|rates_db_net internal| DR[(Postgres: rates)]
+    B -->|booking_db_net internal| DB[(Postgres: booking)]
+    A -->|agent_db_net internal| DA[(Postgres: agent / confirmations)]
+```
+
+## The booking flow (where the gate is visible)
+
+1. **Calculate quote.** Pure calculation in rates-service (no side effects).
+2. **Persist the quote**, then **hold** it (quote goes ACTIVE to HELD).
+3. **The agent PROPOSES `create_booking`.** This is an inert proposal; the gate mints a token and returns a confirmation card. Nothing has executed.
+4. **The user clicks confirm**, which redeems the token.
+5. **The gate executes TWO real calls** (ADR-0005): `POST /bookings` (the booking is born QUOTED then moves to HELD, idempotent on `token = Idempotency-Key`), then `POST /bookings/{id}/confirm` (HELD to CONFIRMED).
+
+The user click is the only thing between a proposal and execution.
+
+## Quickstart
+
+Prerequisites: Docker (with Compose), Node 22 and pnpm 9, and JDK 21 with Maven for the rates service.
 
 ```bash
-make up               # build + start the stack, block until every healthcheck is green
-                      # prints: rates:8080  booking:8081  agent:8082
+make up               # build + start, wait for healthchecks, print rates:8080 booking:8081 agent:8082
 make seed             # load rates demo data (idempotent, safe to re-run)
 make migrate-booking  # apply booking-service Drizzle migrations
+make migrate-agent    # apply agent-service Drizzle migrations (the confirmations table)
 make test             # run each service's test suite
 make down             # stop and remove containers + volumes
 ```
 
-**No host ports on the databases (ADR-0001).** The three Postgres containers are on internal-only networks and publish no host ports. `make seed` runs `psql` inside the rates-db container, and `make migrate-booking` runs the Drizzle migrator inside the Compose network. To open a database yourself, exec into it:
+The databases publish no host ports (ADR-0001): they sit on internal-only networks, so `make seed` and the migrations run inside the Compose network. Environment templates live at `./.env.example` (root) and `./services/agent/.env.example`.
 
-```bash
-docker compose exec rates-db psql -U rates -d rates
-docker compose exec booking-db psql -U booking -d booking
-```
+## Project status
 
-Per-service commands (verified against each `package.json` / `pom.xml`):
+Honest and current. There is no live instance and no public URL yet.
 
-```bash
-# rates-service (services/rates): unit + Testcontainers integration tests
-mvn -B verify
+- **Phase 1 is complete and CI-green:** rates-service, booking-service, and the client manual flow (search, quote, hold, book, confirm or cancel, with booking detail and an event timeline).
+- **Phase 2 agent layers are merged:** L1 (the provider-agnostic LLM adapter), L2 (the tool loop with extraction and validation), and L3 (the confirmation gate and booking execution).
+- **Outstanding:** the chat UI and confirmation cards (D14), the telemetry dashboard (D15), the 40-case eval suite (PLANNED, not built: `make evals` is a stub today), and the AWS deploy (Phase 3, not yet built).
 
-# booking-service (services/booking)
-pnpm test               # Vitest unit tests (state machine, etc.)
-pnpm test:integration   # Testcontainers integration tests against real Postgres
-pnpm lint
-pnpm typecheck
+### CI
 
-# client (client)
-pnpm test               # Vitest
-pnpm e2e                # hermetic Playwright end-to-end (rates/booking mocked at network layer)
-pnpm typecheck
-pnpm lint
-```
+Every push runs: `node-services` (lint, typecheck, test, build for booking and agent, plus an agent-scoped generated-client drift gate), `client` (plus its own drift gate), `client-e2e` (Playwright, hermetic against a mocked rates API; the live-stack booking E2E is deferred per ADR-0004), `rates-service` (`mvn verify` with Testcontainers), `booking-it` and `agent-it` (Testcontainers integration against real Postgres), and `contracts` (Spectral lint, a ruleset self-test, and an oasdiff breaking-change check). The eval suite is not wired into CI yet.
 
-`make evals` is currently a stub that prints "no eval cases yet"; the eval suite is Phase 3 (see roadmap).
+## Decision log
 
-## Engineering decisions
+Decisions are recorded as ADRs under [`docs/decisions/`](docs/decisions/). The load-bearing ones:
 
-- [`0001-db-internal-networks-no-host-ports.md`](docs/decisions/0001-db-internal-networks-no-host-ports.md). Each Postgres runs on an internal-only network with no host ports; reach it via `docker compose exec`, which enforces the database-ownership boundary by routing.
-- [`0002-seed-standalone-not-flyway-migration.md`](docs/decisions/0002-seed-standalone-not-flyway-migration.md). The demo seed is a standalone idempotent SQL script (fixed UUIDs + `ON CONFLICT`), kept out of the schema migration history so migrations stay pure DDL.
-- [`0003-surcharge-composition-percent-of-base.md`](docs/decisions/0003-surcharge-composition-percent-of-base.md). Surcharges are percent-of-base, rounded per line, and sum exactly to the total, so the client never re-sums money.
-- [`0004-l4-split-rates-half-now-booking-half-deferred.md`](docs/decisions/0004-l4-split-rates-half-now-booking-half-deferred.md). L4 was split so the rates UI could ship before booking-service existed; the booking half was deferred, then discharged, without ever inventing a fake API (contract-first). A 2026-07-20 addendum records that the L4 gate is ready for external review but still open.
-- [`0005-booking-hold-level-model-option2-idempotency.md`](docs/decisions/0005-booking-hold-level-model-option2-idempotency.md). A booking is born `QUOTED` and held on create; confirm is actor-agnostic; idempotency is first-write-wins.
+- **[ADR-0005](docs/decisions/0005-booking-hold-level-model-option2-idempotency.md)**: booking hold-level model, born QUOTED and held on create, actor-agnostic confirm, first-write-wins idempotency.
+- **[ADR-0006](docs/decisions/0006-llm-adapter-hand-rolled-fetch-no-sdk.md)**: hand-rolled LLM adapter, no SDKs, record/replay at the HTTP boundary.
+- **[ADR-0008](docs/decisions/0008-propose-only-create-booking-seam.md)**: the propose-only `create_booking` seam.
+- **[ADR-0009](docs/decisions/0009-agent-l3-confirmation-gate.md)**: the L3 confirmation gate.
 
-## Technical highlights
-
-Each of these maps to real code in the repo.
-
-**Contract drift gate.** The `contracts` CI job (`.github/workflows/ci.yml`) runs Spectral lint on every OpenAPI spec, a ruleset self-test, and `oasdiff breaking --fail-on ERR` against the PR base branch. The client job separately regenerates the TypeScript API client with `pnpm gen:api` and fails via `git diff --exit-code src/api` if the generated client drifted from the committed contract. Contracts and the code that consumes them cannot silently diverge.
-
-**Exhaustive state-machine transition matrix.** `services/booking/src/domain/stateMachine.ts` holds the single allowed-transition table and is pure (no DB), so every legal and illegal transition is unit-testable without a container. An illegal transition throws a typed error surfaced as HTTP 409.
-
-| From | Allowed to |
-|---|---|
-| (birth: null) | QUOTED |
-| QUOTED | HELD, CANCELLED, EXPIRED |
-| HELD | CONFIRMED, CANCELLED, EXPIRED |
-| CONFIRMED | DOCUMENTS_ISSUED, CANCELLED |
-| DOCUMENTS_ISSUED | (terminal) |
-| EXPIRED | (terminal) |
-| CANCELLED | (terminal) |
-
-**Race-safe idempotency proven with Testcontainers.** `services/booking/test/idempotency.it.test.ts` runs against a real Postgres and proves first-write-wins under concurrent creates with the same idempotency key (ADR-0005), so double-clicks and retries cannot double-book.
-
-**BigDecimal precision-DoS fix.** `services/rates/src/main/java/com/freightpilot/rates/web/dto/CargoDto.java` uses `@Digits` to bound the precision and scale of the decimal cargo fields. Without it, a short JSON literal with a huge exponent (for example `1E1000000000`) parses to a BigDecimal whose later `setScale` would allocate gigabytes, an unauthenticated single-request denial of service.
-
-## Non-goals
-
-Scope is deliberately fenced (MASTER_PLAN §1):
-
-- No real carrier integrations; rate data is synthetic seed data modeled on real freight structure.
-- No real auth (a single demo user), no payments.
-- No Kubernetes; Docker Compose locally and the simplest viable AWS deploy.
-- No reinforcement learning and no fine-tuning; the agent is tool-calling plus prompts plus evals.
-- Desktop-first React; no mobile.
-- Temporal, SQS, and an MCP server are Phase 4 stretch only.
-
-## Roadmap
-
-- **Phase 1 (L1-L4, the manual product): built and CI-green.** Rates and booking, backend to browser. The first AWS deploy (D9) and the external L4 review gate are still ahead, so nothing is deployed and there is no live URL yet.
-- **Phase 2 (L5, the agent layer): in progress, next up.** Provider adapter with automatic fallback routing, tool schemas mapped one-to-one onto the public endpoints, extraction with validation and retry, the confirmation gate, and per-request telemetry.
-- **Phase 3 (L6-L7): planned.** The 40-case eval suite as a merge-blocking CI gate, the telemetry dashboard, then ops and AWS deployment.
-
-See [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) for the full plan.
+The full plan lives in [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
