@@ -102,6 +102,7 @@ Decisions are recorded as ADRs under [`docs/decisions/`](docs/decisions/). The l
 
 - **[ADR-0005](docs/decisions/0005-booking-hold-level-model-option2-idempotency.md)**: booking hold-level model, born QUOTED and held on create, actor-agnostic confirm, first-write-wins idempotency.
 - **[ADR-0006](docs/decisions/0006-llm-adapter-hand-rolled-fetch-no-sdk.md)**: hand-rolled LLM adapter, no SDKs, record/replay at the HTTP boundary.
+- **[ADR-0007](docs/decisions/0007-live-verified-llm-provider-availability.md)**: live-verified LLM chain, Cerebras dropped, Gemini pinned to an alias.
 - **[ADR-0008](docs/decisions/0008-propose-only-create-booking-seam.md)**: the propose-only `create_booking` seam.
 - **[ADR-0009](docs/decisions/0009-agent-l3-confirmation-gate.md)**: the L3 confirmation gate.
 
