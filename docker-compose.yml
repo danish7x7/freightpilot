@@ -107,6 +107,12 @@ services:
       AGENT_DATABASE_URL: postgres://agent:${AGENT_DB_PASSWORD:-agent_dev}@agent-db:5432/agent
       RATES_SERVICE_URL: http://rates-service:8080
       BOOKING_SERVICE_URL: http://booking-service:8081
+      # LLM chain for POST /api/v1/turns (L5/D14). If keys are empty the service boots in
+      # gate-only mode — the confirmation gate does NOT depend on the LLM. Keys come from .env.
+      LLM_CHAIN: ${LLM_CHAIN:-gemini:gemini-2.5-flash,groq:llama-3.3-70b-versatile}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
     depends_on:
       agent-db:
         condition: service_healthy

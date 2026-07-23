@@ -1,0 +1,277 @@
+openapi: 3.0.3
+info:
+  title: agent-service API
+  version: 0.1.0
+  description: >
+    The agent-service public surface consumed by the L5 chat UI (§6.3). Three endpoints:
+    POST /turns runs one agent tool-loop turn (extract → validate → retry → fallback, §6.2)
+    and, when the loop yields the inert create_booking proposal, mints a confirmation token;
+    GET/POST /confirmations/{token} are the confirmation gate (§6.3.2) — GET renders the
+    non-secret card, POST is the single user-click that redeems the token and executes the
+    booking. The token is a SECRET credential (possession == authorization, ADR-0009 Cond. F);
+    it is returned once in the turn response body and never re-emitted by GET.
+
+    Written contract-first, ahead of the client (D14 / ADR-0010): this spec supersedes
+    ADR-0009 Flag 7, which withheld a contract while agent-service had no consumer. It joins
+    rates/booking under the §5 rules — spectral lint + oasdiff breaking-change gate, and the
+    client regenerates `client/src/api/agent.gen.ts` from it (drift-checked in CI). Documenting
+    the token-bearing proposal shape leaks no secret — a spec describes shape, not values.
+servers:
+  - url: http://localhost:8082
+    description: local compose
+paths:
+  /api/v1/turns:
+    post:
+      operationId: postTurn
+      summary: Run one agent turn; may return an inert booking proposal + confirmation token
+      description: >
+        Drives the real tool loop (runAgentTurn) and maps its outcome to one of four arms.
+        The `proposal` arm is the ONLY one carrying a token — minted server-side via the gate
+        after the loop produces the inert create_booking proposal (this is proposing; nothing
+        is executed until the token is redeemed). Stateless per request: `conversation_id` is
+        minted if absent and echoed back so the client can continue the thread; NO conversation
+        state is persisted (that is L4). `502` (code `LLM_UNAVAILABLE`) is the expected free-tier
+        outage — every LLM provider in the chain rate-limited/exhausted — not an internal bug.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TurnRequest' }
+      responses:
+        '200':
+          description: The turn's outcome (one of four arms; only `proposal` carries a token)
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TurnResponse' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/ErrorResponse'
+  /api/v1/confirmations/{token}:
+    get:
+      operationId: getConfirmation
+      summary: The non-secret confirmation card for a token (renders the gate UI)
+      description: >
+        Returns the current card state. Deliberately does NOT re-emit the token — the caller
+        already holds it — so refetching/polling the card is safe. Polling this endpoint is how
+        the client resolves a `202 in_progress` redeem.
+      parameters:
+        - $ref: '#/components/parameters/TokenPath'
+      responses:
+        '200':
+          description: The confirmation card (non-secret; no token field)
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardState' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: redeemConfirmation
+      summary: Redeem the token — the single user click that executes the booking
+      description: >
+        The ONE path from an approved proposal to a booking (single-use claim, then execute
+        exactly once — ADR-0009). The request has NO body: the server-authoritative proposal is
+        keyed by the token, and `actor` is fixed to `agent`; a client cannot supply either.
+        200 = a real actionable outcome (confirmed | held_unconfirmed); 202 = the winner is
+        still executing (in_progress) — poll GET to resolve.
+      parameters:
+        - $ref: '#/components/parameters/TokenPath'
+      responses:
+        '200':
+          description: Redeemed — booking confirmed, or created-but-confirm-degraded (HELD)
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RedeemSettled' }
+        '202':
+          description: The concurrent winner is still executing; poll GET to resolve
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RedeemInProgress' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  parameters:
+    TokenPath:
+      name: token
+      in: path
+      required: true
+      description: >
+        The secret confirmation token: 32 random bytes, base64url — exactly 43 url-safe chars.
+        Possession IS authorization (ADR-0009 Cond. F); it rides the path as a fetch credential
+        and must never enter a navigable URL, browser history, logs, or a query-cache key.
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+  headers:
+    XRequestId:
+      description: Correlation id, echoed from the request or minted if absent/invalid.
+      schema: { type: string }
+  responses:
+    ErrorResponse:
+      description: Uniform error envelope
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    TurnRequest:
+      type: object
+      required: [message]
+      properties:
+        conversation_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Continues an existing thread; server mints one if absent. NOT persisted (L4).
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: The user's natural-language turn.
+    # The four-arm turn outcome (discriminated on `kind`). Every arm echoes conversation_id.
+    TurnResponse:
+      oneOf:
+        - $ref: '#/components/schemas/TurnTextReply'
+        - $ref: '#/components/schemas/TurnFormFallbackReply'
+        - $ref: '#/components/schemas/TurnToolReply'
+        - $ref: '#/components/schemas/TurnProposalReply'
+      discriminator:
+        propertyName: kind
+        mapping:
+          text: '#/components/schemas/TurnTextReply'
+          form_fallback: '#/components/schemas/TurnFormFallbackReply'
+          tool: '#/components/schemas/TurnToolReply'
+          proposal: '#/components/schemas/TurnProposalReply'
+    TurnTextReply:
+      type: object
+      required: [kind, conversation_id, text]
+      properties:
+        kind: { type: string, enum: [text] }
+        conversation_id: { type: string }
+        text: { type: string, description: The model answered/clarified in text — no tool ran. }
+    TurnFormFallbackReply:
+      type: object
+      required: [kind, conversation_id, reason]
+      properties:
+        kind: { type: string, enum: [form_fallback] }
+        conversation_id: { type: string }
+        reason: { type: string, description: Why extraction/validation failed — drop to the manual form. }
+        validation_errors:
+          type: array
+          items: { type: string }
+    TurnToolReply:
+      type: object
+      required: [kind, conversation_id, tool, result]
+      properties:
+        kind: { type: string, enum: [tool] }
+        conversation_id: { type: string }
+        tool: { type: string, description: The tool that ran (a live rates/booking endpoint). }
+        result: { $ref: '#/components/schemas/ToolResultView' }
+    TurnProposalReply:
+      type: object
+      required: [kind, conversation_id, token, card]
+      properties:
+        kind: { type: string, enum: [proposal] }
+        conversation_id: { type: string }
+        token:
+          type: string
+          description: >
+            The SECRET confirmation credential (see TokenPath). Returned exactly once, here, in
+            the response body; GET /confirmations never re-emits it. The client holds it in
+            memory only.
+        card: { $ref: '#/components/schemas/CardState' }
+    # A courier'd rates/booking response (verbatim, §2.2) — a non-2xx is data, not an error.
+    ToolResultView:
+      type: object
+      required: [ok, status]
+      properties:
+        ok: { type: boolean }
+        status:
+          type: integer
+          description: The upstream HTTP status, forwarded verbatim.
+        data:
+          type: object
+          nullable: true
+          additionalProperties: true
+        error:
+          type: object
+          nullable: true
+          additionalProperties: true
+    # Non-secret view of a confirmation (no token). Mirrors gateService CardState verbatim.
+    CardState:
+      type: object
+      required: [confirmation_id, quote_id, shipper_ref, status, expires_at, booking_id, final_status]
+      properties:
+        confirmation_id: { type: string, format: uuid }
+        quote_id: { type: string, format: uuid }
+        shipper_ref: { type: string }
+        status:
+          type: string
+          description: Lifecycle of the confirmation row (e.g. pending, consumed, expired).
+        expires_at: { type: string, format: date-time }
+        booking_id: { type: string, format: uuid, nullable: true }
+        final_status: { type: string, nullable: true }
+    # Redeem outcome on 200 (a real, settled state): confirmed | held_unconfirmed.
+    RedeemSettled:
+      oneOf:
+        - $ref: '#/components/schemas/RedeemConfirmed'
+        - $ref: '#/components/schemas/RedeemHeldUnconfirmed'
+      discriminator:
+        propertyName: status
+        mapping:
+          confirmed: '#/components/schemas/RedeemConfirmed'
+          held_unconfirmed: '#/components/schemas/RedeemHeldUnconfirmed'
+    RedeemConfirmed:
+      type: object
+      required: [status, confirmation_id, booking_id, final_status, replayed]
+      properties:
+        status: { type: string, enum: [confirmed] }
+        confirmation_id: { type: string, format: uuid }
+        booking_id: { type: string, format: uuid }
+        final_status: { type: string, enum: [CONFIRMED] }
+        replayed:
+          type: boolean
+          description: True when this click re-observed an already-consumed row (idempotent re-click) — still a success, not an error.
+    RedeemHeldUnconfirmed:
+      type: object
+      required: [status, confirmation_id, booking_id, final_status, detail]
+      properties:
+        status: { type: string, enum: [held_unconfirmed] }
+        confirmation_id: { type: string, format: uuid }
+        booking_id: { type: string, format: uuid }
+        final_status: { type: string, description: The booking's last known status (e.g. HELD). }
+        detail: { type: string, description: Why confirm did not complete cleanly. }
+    # Redeem outcome on 202: the winner is mid-execution. May be permanent if the winner's
+    # process died (crashed-winner reaper deferred, ADR-0009) — the client bounds its polling.
+    RedeemInProgress:
+      type: object
+      required: [status, confirmation_id]
+      properties:
+        status: { type: string, enum: [in_progress] }
+        confirmation_id: { type: string, format: uuid }
+    ErrorEnvelope:
+      type: object
+      required: [code, message, details]
+      properties:
+        code: { type: string, example: CONFIRMATION_EXPIRED }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: string }
