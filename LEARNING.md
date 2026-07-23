@@ -31,6 +31,11 @@ Format:
 
 ## TypeScript / Node / Fastify
 
+### 2026-07-22 — A polling stop-condition needs its own state; `refetchInterval → false` doesn't re-render
+**What I learned:** In TanStack Query, returning `false` from `refetchInterval` only STOPS the poll — it does NOT trigger a React re-render. So a deadline-based "give up spinning" can't live only inside the interval callback: when the clock passes the deadline the poll quietly stops, but the component keeps showing "Finishing…" forever because nothing re-rendered. The fix is an explicit `setTimeout(setPollExhausted)` that flips a state var, forcing the terminal render.
+**How I hit it:** D14 bounded confirmation polling (`useConfirmationCard`) — the 202→deadline-exhaust Playwright case (driven by `clock.fastForward`) caught the UI stuck on "Finishing…" after the poll had already stopped.
+**Why it matters / where it transfers:** "Stop the effect" and "show the timeout to the user" are two different jobs — the library's control-flow return value isn't a render trigger. Any deadline-driven UI needs a piece of state whose CHANGE the renderer observes, not just a side effect that halts the loop.
+
 ### 2026-07-14 — Pin the build tool to your test runner's major
 **What I learned:** When a test runner owns a peer of a build tool, pin the build tool to the runner's major or you get two copies in the tree with incompatible types.
 **How I hit it:** client had `vite@6` as a direct devDep while vitest@2.1 + @vitejs/plugin-react pulled `vite@5`; the two Vite `Plugin` types clashed and `tsc --noEmit` failed with a deep TS2769 overload error — tests and build were fine, only typecheck broke.
@@ -59,6 +64,11 @@ Format:
 **Why it matters / where it transfers:** Config flexibility and attack surface are the same axis — everything read from env is something an operator or attacker can point elsewhere. Pin the security-relevant parts (hosts) in code; vary only the benign parts.
 
 ## Evals & Testing
+
+### 2026-07-22 — A comma in a YAML flow-mapping description crashes spectral with `Cannot read properties of null (reading 'enum')`
+**What I learned:** Spectral (via nimma's `$..` recursive descent) throws a non-obvious `Cannot read properties of null (reading 'enum')` when an OpenAPI YAML FLOW-mapping scalar contains a comma — e.g. `status: { type: integer, description: The upstream HTTP status, forwarded verbatim. }`. YAML parses the text after that second comma as a keyless entry → a null node → the crash. Fix: use BLOCK style for any description containing a comma or colon inside `{ }`. I diagnosed it by bisecting: the STOCK ruleset crashed too (so it wasn't our custom rules), then bisecting schemas isolated the one leaf with an inline flow description.
+**How I hit it:** authoring `contracts/agent.openapi.yaml` (D14) — a re-encounter of a footgun a prior LEARNING entry warned about, but this time with the exact crash signature and a repeatable bisection method (stock-vs-custom ruleset, then narrow the schema).
+**Why it matters / where it transfers:** A cryptic null-property crash deep in a linter's traversal usually means the INPUT parsed into a shape the tool never expected, not a bug in your rules — bisect the tooling layer (stock vs custom config) before your own code, then bisect the input. And YAML flow scalars silently eat commas: prefer block style for any free text.
 
 ### 2026-07-21 — Minimize recorded fixtures to fields the consumer reads — and do it IN the recorder, not post-hoc
 **What I learned:** A committed record/replay fixture should carry ONLY the fields the consumer actually reads. Two reasons beyond tidiness: (a) opaque provider blobs get you in trouble — Gemini thinking-model responses ship an encrypted `thoughtSignature` reasoning-state field the adapter never consumes, and its base64 payload trips secret-scanners as a FALSE POSITIVE; (b) the minimization has to live INSIDE the recorder (a typed `sanitizeBody` that keeps only normalizer-read fields), or committed fixtures drift from what the next `record:fixtures` produces and re-recording silently reintroduces the noise. Error (non-2xx) bodies pass through untouched — the adapter reads only their status.
@@ -127,11 +137,6 @@ Format:
 **How I hit it:** L4 QuoteList/QuoteBreakdown/formatMoney — the sort toggles `base_rate_cents`/`transit_days_min` (labeled "Base rate", not "cheapest"), the breakdown never re-sums, and ÷100 lives in one place.
 **Why it matters / where it transfers:** If the client re-derives a price or a ranking it can disagree with the service — two sources of truth for one number. Keeping money math server-side is the same discipline as not letting the UI own the state machine.
 
-### 2026-07-15 — "Contract-first" doesn't mean the contract is valid — the lint gate does
-**What I learned:** The spectral gate caught TWO latent bugs in the already-merged, hand-authored L2 spec: an unquoted comma inside a YAML flow-mapping description that parsed as a bogus null property (crashed spectral/nimma), and a 3.1-style numeric `exclusiveMinimum: 0` used inside an `openapi: 3.0.3` doc (invalid in 3.0 — the 3.0 form is `minimum: 0, exclusiveMinimum: true`).
-**How I hit it:** Turning on spectral for L3 surfaced both immediately in a spec that had shipped through L2 review as "contract-first."
-**Why it matters / where it transfers:** Authoring the contract before the code buys you a design, not a valid artifact — YAML footguns and OAS 3.0-vs-3.1 schema drift slip past human review. The machine gate is what makes the spec actually load-bearing.
-
 ### 2026-07-14 — Make the breakdown sum to the total by construction, not by luck
 **What I learned:** Composing a money total as base + surcharges is robust only if each line rounds independently (HALF_UP to integer cents), percents are taken off the base (not a running total), and the breakdown lines are defined to sum exactly to the total — that also makes the result order-independent.
 **How I hit it:** L2 quote calculation (ADR-0003): I chose percent-of-base over percent-of-running-total so surcharge order can't change the price, and asserted in tests that the breakdown lines add up to `total_cents` exactly, with everything in BigDecimal/integer — no `double`.
@@ -185,6 +190,11 @@ Format:
 **Why it matters / where it transfers:** Turning a written rule into "impossible to violate by construction" is stronger than a lint or a code review — same idea as making an invalid booking state transition a type error.
 
 ## Process (what worked / what didn't in the build workflow)
+
+### 2026-07-22 — A governance gate can bisect a layer: land the wiring seam, defer the prompt behind its eval PR
+**What I learned:** When a layer's endpoint needs a prompt to be MEANINGFUL but "prompt files are code" (a new `prompts/*.md` requires an eval run + committed scorecard + eval-auditor gate), split the work: land the endpoint running the REAL loop with NO system prompt (and no conversation persistence) so the WIRING seam and its contract ship, and defer the live-LLM behavior to a separate prompt PR that carries the eval discipline. The tell that the split was clean: eval-auditor was correctly ABSENT from this session's review chain, because no prompt/eval file was touched.
+**How I hit it:** D14 chat-UI + gate wiring (Option A) — the turn endpoint became the first production caller of `gateService.propose()` while the system prompt + eval suite were held for the L5 prompt PR (ADR-0010's "Revisit when").
+**Why it matters / where it transfers:** A governance rule (prompts are regression-tested like code) is a real seam in the work plan, not just paperwork — respect it by shipping the part that doesn't cross the gate now and letting the gated part travel with its own evidence. Same family as "narrow the work, not the DoD": defer honestly along the boundary the process draws.
 
 ### 2026-07-15 — Narrow the work, not the DoD
 **What I learned:** When a layer half-depends on a service that doesn't exist yet, narrow the WORK (ship the half you can build honestly) and keep the layer's DoD/gate OPEN for the deferred half — do NOT stub a fake path. Stubbing a booking flow the client can't really call would violate contract-first (§5) and client-owns-no-business-logic (§2.2).

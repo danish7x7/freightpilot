@@ -230,3 +230,51 @@ describe("gate HTTP routes (real Postgres)", () => {
     await app.close();
   });
 });
+
+describe("turn route mints a real confirmation (POST /api/v1/turns → proposal arm)", () => {
+  // A stub loop returns the inert create_booking proposal; the turn handler must call the REAL
+  // propose() (mint token + persist row against Postgres) and hand back a redeemable token.
+  function turnApp() {
+    const proposalResult = {
+      kind: "tool" as const,
+      tool: "create_booking",
+      execution: { kind: "proposal" as const, proposal: proposal() },
+    };
+    return buildApp({
+      ...deps(),
+      turn: {
+        router: {} as never,
+        tools: [],
+        clients: {} as never,
+        runLoop: async () => proposalResult,
+      },
+    });
+  }
+
+  test("proposal arm returns a token that GET/POST can then redeem", async () => {
+    const app = turnApp();
+    const turnRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/turns",
+      payload: { message: "book quote 2222 as PO-1" },
+    });
+    expect(turnRes.statusCode).toBe(200);
+    const body = turnRes.json();
+    expect(body).toMatchObject({ kind: "proposal", card: { quote_id: QUOTE, status: "pending" } });
+    expect(body.token).toMatch(/^[A-Za-z0-9_-]{43}$/); // a real minted token
+    expect(body.card.token).toBeUndefined(); // the card NEVER carries the token
+
+    // The token minted by the turn is a live gate credential: the card GET resolves it...
+    const cardRes = await app.inject({ method: "GET", url: `/api/v1/confirmations/${body.token}` });
+    expect(cardRes.statusCode).toBe(200);
+    expect(cardRes.json()).toMatchObject({ confirmation_id: body.card.confirmation_id });
+
+    // ...and a single redeem executes the booking (proving turn→gate share one store).
+    interceptCreate(201, { id: BID, status: "HELD" });
+    interceptConfirm({ status: 200, body: { id: BID, status: "CONFIRMED" } });
+    const redeemRes = await app.inject({ method: "POST", url: `/api/v1/confirmations/${body.token}` });
+    expect(redeemRes.statusCode).toBe(200);
+    expect(redeemRes.json()).toMatchObject({ status: "confirmed", booking_id: BID });
+    await app.close();
+  });
+});

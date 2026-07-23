@@ -6,7 +6,7 @@ Specs:
 
 - `rates.openapi.yaml` — rates-service (landed at L2, ADR-0003; contract-first).
 - `booking.openapi.yaml` — booking-service (landed at L2 alongside the routes; TS client generated at L3, contract-first).
-- `agent.openapi.yaml` — _agent-service (Phase 2)._
+- `agent.openapi.yaml` — agent-service: the L5 chat turn endpoint + the confirmation gate (landed at D14, ADR-0010; contract-first). Supersedes ADR-0009 Flag 7, which withheld a contract while the service had no consumer.
 
 ## Conventions (§5), enforced by the ruleset
 
