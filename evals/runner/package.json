@@ -1,0 +1,27 @@
+{
+  "name": "@freightpilot/evals-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "description": "L6 eval harness — drives the REAL agent tool loop (services/agent) over recorded LLM responses and gates on tool-choice + safety tiers. Imports agent SOURCE by relative path (run under tsx); it does not reimplement the loop, tools, or validators.",
+  "scripts": {
+    "eval": "tsx src/run.ts",
+    "record": "EVAL_RECORD=1 tsx --env-file-if-exists=../../services/agent/.env src/run.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

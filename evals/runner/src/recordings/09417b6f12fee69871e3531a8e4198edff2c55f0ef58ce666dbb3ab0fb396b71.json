@@ -1,0 +1,8 @@
+{
+  "eval_provider_error": {
+    "kind": "client",
+    "provider": "groq",
+    "status": 400,
+    "message": "groq client error (400): {\"error\":{\"message\":\"Failed to call a function. Please adjust your prompt. See 'failed_generation' for more details.\",\"type\":\"invalid_request_error\",\"code\":\"tool_use_failed\",\"failed_generation\":\"\\u003cfunction=search_rates({\\\"origin\\\": \\\"CNSHA\\\", \\\"dest\\\": \\\"NLRTM\\\", \\\"mode\\\": \\\"OCEAN\\\", \\\"ship_date…"
+  }
+}

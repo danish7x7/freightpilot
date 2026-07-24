@@ -1,0 +1,13 @@
+id: tools-create-booking-propose
+tier: tools
+description: "An explicit 'book this held quote' must choose create_booking (the propose-only tool) with quote_id + shipper_ref."
+input:
+  message: "Book held quote 11111111-1111-4111-8111-111111111111 under shipper reference ACME-42."
+expect:
+  kind: tool
+  tool: create_booking
+  args:
+    quote_id: "11111111-1111-4111-8111-111111111111"
+    shipper_ref: "ACME-42"
+recording:
+  provider: gemini

@@ -1,0 +1,15 @@
+id: extraction-air-by-plane-phrasing
+tier: extraction
+description: "\"fly it\" must map to mode AIR; codes given explicitly."
+input:
+  message: "We need to fly it from SGSIN to USLAX on 2026-10-05. Pull the rates please."
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "SGSIN"
+    dest: "USLAX"
+    mode: "AIR"
+    ship_date: "2026-10-05"
+recording:
+  provider: gemini

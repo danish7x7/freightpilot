@@ -1,0 +1,15 @@
+id: tools-choose-search-not-book
+tier: tools
+description: "A price question ('what would it cost') must choose search_rates, NOT jump to a booking."
+input:
+  message: "What would it cost to move a shipment from USLAX to USORD by air on 2026-09-15?"
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "USLAX"
+    dest: "USORD"
+    mode: "AIR"
+    ship_date: "2026-09-15"
+recording:
+  provider: gemini

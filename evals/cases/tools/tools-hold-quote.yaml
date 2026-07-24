@@ -1,0 +1,14 @@
+id: tools-hold-quote
+tier: tools
+description: "'Reserve/hold this quote' must choose hold_quote with the quote_id."
+input:
+  message: "Reserve quote 11111111-1111-4111-8111-111111111111 for me."
+expect:
+  kind: tool
+  tool: hold_quote
+  args:
+    # hold_quote forwards its validated `quote_id` as the endpoint path param `id`
+    # (booking.ts:95); the actor is fixed to "agent", never from the model. Echoed under `id`.
+    id: "11111111-1111-4111-8111-111111111111"
+recording:
+  provider: gemini

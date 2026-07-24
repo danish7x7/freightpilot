@@ -1,0 +1,9 @@
+id: extraction-nonsense-lane-clarify
+tier: extraction
+description: "A non-location origin ('the moon') should draw a clarification. Non-gating baseline."
+input:
+  message: "Get me freight rates from the moon to USOAK next week."
+expect:
+  kind: text
+recording:
+  provider: gemini

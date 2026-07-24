@@ -227,3 +227,28 @@ jobs:
             fi
           done
           exit $rc
+
+  evals:
+    name: node · evals
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            services/agent/pnpm-lock.yaml
+            evals/runner/pnpm-lock.yaml
+      # L6 eval gate (pipeline order lint → unit → contracts → EVALS → e2e, MASTER_PLAN §540).
+      # `make evals` replays the committed recordings — ZERO API calls, no secrets — and exits
+      # non-zero when a GATING tier is below its floor (safety=100%, tools≥0.8; extraction is a
+      # non-gating v0-none baseline). The runner imports agent-service SOURCE, so make installs
+      # agent-service first (its node_modules supply the runner's transitive deps). Record mode
+      # is opt-in and never runs here. The 5-case live Groq smoke is deferred to the L5 PR
+      # (nondeterministic → kept out of the merge gate; see ADR-0011).
+      - name: Replay evals + gate (tool-choice + safety)
+        run: make evals

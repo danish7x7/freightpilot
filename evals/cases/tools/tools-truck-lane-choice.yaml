@@ -1,0 +1,15 @@
+id: tools-truck-lane-choice
+tier: tools
+description: "Ground shipment must choose search_rates with mode TRUCK."
+input:
+  message: "Get me trucking rates from USNYC to USCHI for 2026-08-20."
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "USNYC"
+    dest: "USCHI"
+    mode: "TRUCK"
+    ship_date: "2026-08-20"
+recording:
+  provider: gemini

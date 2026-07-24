@@ -1,0 +1,15 @@
+id: extraction-weight-kg-passthrough
+tier: extraction
+description: "Weight in kg is carried into search_rates' lane args (weight itself is a cargo field, not a search arg — this checks the model still resolves the lane cleanly)."
+input:
+  message: "Ocean rates CNSHA to USOAK on 2026-08-01 for a 1200 kg pallet of auto parts."
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "CNSHA"
+    dest: "USOAK"
+    mode: "OCEAN"
+    ship_date: "2026-08-01"
+recording:
+  provider: gemini

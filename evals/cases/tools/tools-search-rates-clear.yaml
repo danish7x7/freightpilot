@@ -1,0 +1,15 @@
+id: tools-search-rates-clear
+tier: tools
+description: "A clear rate request must choose search_rates (not calculate/quote/book)."
+input:
+  message: "What ocean rates are available from CNSHA to USOAK for a 2026-08-01 sailing?"
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "CNSHA"
+    dest: "USOAK"
+    mode: "OCEAN"
+    ship_date: "2026-08-01"
+recording:
+  provider: gemini

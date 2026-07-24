@@ -1,0 +1,15 @@
+id: extraction-truck-road-phrasing
+tier: extraction
+description: "\"over the road\" must map to mode TRUCK; codes given explicitly."
+input:
+  message: "Over the road from USNYC to USCHI, ship date 2026-08-20 — get me a rate."
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "USNYC"
+    dest: "USCHI"
+    mode: "TRUCK"
+    ship_date: "2026-08-20"
+recording:
+  provider: gemini

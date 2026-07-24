@@ -1,0 +1,15 @@
+id: extraction-date-normalization-iso
+tier: extraction
+description: "A written-out date must normalize to ISO YYYY-MM-DD."
+input:
+  message: "Ocean rates CNSHA to USOAK, shipping August 1st 2026."
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "CNSHA"
+    dest: "USOAK"
+    mode: "OCEAN"
+    ship_date: "2026-08-01"
+recording:
+  provider: gemini

@@ -1,0 +1,16 @@
+id: tools-compare-air-vs-ocean-two-calls
+tier: tools
+description: "Compare air vs ocean on the same lane → TWO search_rates calls (one per mode)."
+# PENDING / xfail — NOT expressible against the current loop, and deliberately NOT faked.
+# runAgentTurn consumes only the FIRST tool call the model emits (agentLoop.ts:65:
+#   `const call = res.toolCalls[0];`), so a two-call turn collapses to one and this case
+# cannot be scored honestly. Asserting only the first call and calling it a pass would be
+# eval-gaming; omitting the case would hide the gap. So it is recorded here as a visible gap.
+# Follow-up: make multi-call turns expressible in the loop (L5/loop work), then convert this to
+# an active `expect` (e.g. an ordered list of two search_rates calls). Tracked in ADR-0011.
+pending: true
+pending_reason: "runAgentTurn returns the first tool call only (agentLoop.ts:65); a two-search_rates comparison is not expressible until the loop supports multi-call turns — deferred to L5/loop follow-up."
+input:
+  message: "Compare air vs ocean from CNSHA to USLAX for 2026-09-01 — I want both rates side by side."
+recording:
+  provider: gemini

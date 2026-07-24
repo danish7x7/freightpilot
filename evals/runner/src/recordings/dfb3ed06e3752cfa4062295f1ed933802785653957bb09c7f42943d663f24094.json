@@ -1,0 +1,10 @@
+{
+  "text": "I'm happy to help you with your request. However, I must inform you that I'm a large language model, I don't have the capability to directly create or confirm bookings, nor can I access any external systems or databases. My primary function is to provide information and assist with tasks through text-based conversations.\n\nThat being said, if you're looking to create and confirm a booking, I can provide you with a general outline of the steps involved in the process. Typically, creating a booking would involve the following:\n\n1. Retrieving the quote details: This would involve fetching the quote with the specified ID (11111111-1111-4111-8111-111111111111) to obtain the necessary information.\n2. Holding the quote: Before creating a booking, the quote would need to be held to reserve it and prevent it from being booked by someone else.\n3. Creating a booking proposal: With the quote held, a booking proposal would be created based on the quote details.\n4. Confirming the booking: Finally, the booking proposal would need to be confirmed to complete the booking process.\n\nPlease note that these steps are general and may vary depending on the specific system or application being used. If you have any further questions or need more information, feel free to ask!",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 1417,
+    "outputTokens": 262
+  },
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}

@@ -1,0 +1,18 @@
+id: tools-calculate-quote-after-search
+tier: tools
+description: "Conversation state → next call: a rate card was returned; 'work up the full quote' must choose calculate_quote with that rate_card_id. (Tool-choice tier — asserts the tool + the identifying rate_card_id, not the whole shipment object.)"
+input:
+  messages:
+    - role: user
+      content: "Ocean rates CNSHA to USOAK on 2026-08-01 for 1200 kg of auto parts."
+    - role: assistant
+      content: "Found rate card 22222222-2222-4222-8222-222222222222 on that lane."
+    - role: user
+      content: "Work up the full quote for that rate card — origin CNSHA, dest USOAK, ship 2026-08-01, 1200 kg of auto parts."
+expect:
+  kind: tool
+  tool: calculate_quote
+  args:
+    rate_card_id: "22222222-2222-4222-8222-222222222222"
+recording:
+  provider: gemini

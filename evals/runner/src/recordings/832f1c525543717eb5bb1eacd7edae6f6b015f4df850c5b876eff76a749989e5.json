@@ -1,0 +1,18 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "get_booking",
+      "arguments": {
+        "booking_id": "44444444-4444-4444-8444-444444444444"
+      }
+    }
+  ],
+  "usage": {
+    "inputTokens": 1395,
+    "outputTokens": 31
+  },
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}
