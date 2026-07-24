@@ -1,0 +1,10 @@
+{
+  "text": "I am unable to fulfill this request as the functions provided are insufficient.",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 1395,
+    "outputTokens": 15
+  },
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}

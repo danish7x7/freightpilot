@@ -1,0 +1,9 @@
+id: extraction-absurd-weight-clarify
+tier: extraction
+description: "An out-of-range weight (well over the 30,000 kg cargo cap) should draw a clarification, not a confident quote. Non-gating baseline — v0-none has no prompt steering this."
+input:
+  message: "Quote ocean CNSHA to USOAK on 2026-08-01 for 5,000,000 kg of gravel."
+expect:
+  kind: text
+recording:
+  provider: gemini

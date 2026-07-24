@@ -1,0 +1,21 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "search_rates",
+      "arguments": {
+        "dest": "USORD",
+        "mode": "AIR",
+        "origin": "USLAX",
+        "ship_date": "2026-09-15"
+      }
+    }
+  ],
+  "usage": {
+    "inputTokens": 1395,
+    "outputTokens": 41
+  },
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}

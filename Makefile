@@ -57,6 +57,12 @@ test:
 	@echo ">> agent-service (vitest)"
 	cd services/agent && pnpm install --frozen-lockfile && pnpm test
 
-## evals: no-op stub at L0 — the 40-case eval suite lands in L6 (see MASTER_PLAN §7).
+## evals: replay the committed recordings and gate on the tool-choice + safety tiers (L6).
+## Zero API calls — a replay miss is a hard error, never a live call. Exits non-zero when a
+## GATING tier is below its floor (safety=100%, tools≥0.8); extraction prints but never gates.
+## The runner imports agent SOURCE by relative path, so agent-service must be installed first
+## (its node_modules supply the runner's transitive deps). Record mode is separate + opt-in:
+##   cd evals/runner && EVAL_RECORD_PROVIDER=groq pnpm run record   (manual, needs real keys).
 evals:
-	@echo "make evals: no eval cases yet (eval suite arrives in L6)."
+	cd services/agent && pnpm install --frozen-lockfile
+	cd evals/runner && pnpm install --frozen-lockfile && pnpm run eval

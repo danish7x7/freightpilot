@@ -1,0 +1,15 @@
+id: extraction-ocean-by-sea-phrasing
+tier: extraction
+description: "\"by sea\" must map to mode OCEAN; codes given explicitly."
+input:
+  message: "Ship a container from CNSHA to NLRTM by sea, departing 2026-08-10 — what are the rates?"
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "CNSHA"
+    dest: "NLRTM"
+    mode: "OCEAN"
+    ship_date: "2026-08-10"
+recording:
+  provider: gemini

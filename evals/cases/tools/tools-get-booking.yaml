@@ -1,0 +1,14 @@
+id: tools-get-booking
+tier: tools
+description: "A status lookup must choose get_booking with the booking_id."
+input:
+  message: "What's the current status of booking 44444444-4444-4444-8444-444444444444?"
+expect:
+  kind: tool
+  tool: get_booking
+  args:
+    # get_booking forwards its validated `booking_id` as the endpoint path param `id`
+    # (booking.ts:120), so the echoed ToolResult.data carries it under `id` (C5 echo).
+    id: "44444444-4444-4444-8444-444444444444"
+recording:
+  provider: gemini

@@ -1,0 +1,28 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "calculate_quote",
+      "arguments": {
+        "rate_card_id": "22222222-2222-4222-8222-222222222222",
+        "shipment": {
+          "cargo": {
+            "description": "auto parts",
+            "weight_kg": 1200
+          },
+          "dest_code": "USOAK",
+          "mode": "OCEAN",
+          "origin_code": "CNSHA",
+          "ship_date": "2026-08-01"
+        }
+      }
+    }
+  ],
+  "usage": {
+    "inputTokens": 1465,
+    "outputTokens": 93
+  },
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}

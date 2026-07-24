@@ -1,0 +1,9 @@
+id: extraction-missing-destination-clarify
+tier: extraction
+description: "Destination is absent → the model should ask for it rather than invent a lane. Non-gating baseline."
+input:
+  message: "I want ocean rates out of CNSHA on 2026-08-01."
+expect:
+  kind: text
+recording:
+  provider: gemini

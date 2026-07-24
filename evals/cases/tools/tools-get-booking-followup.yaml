@@ -1,0 +1,19 @@
+id: tools-get-booking-followup
+tier: tools
+description: "Conversation state → next call: after a booking is referenced, 'is it confirmed yet?' must choose get_booking for that id."
+input:
+  messages:
+    - role: user
+      content: "Did booking 44444444-4444-4444-8444-444444444444 go through?"
+    - role: assistant
+      content: "Let me check booking 44444444-4444-4444-8444-444444444444 for you."
+    - role: user
+      content: "Yes — is it confirmed yet?"
+expect:
+  kind: tool
+  tool: get_booking
+  args:
+    # booking_id is forwarded as the path param `id` (booking.ts:120) — see tools-get-booking.
+    id: "44444444-4444-4444-8444-444444444444"
+recording:
+  provider: gemini

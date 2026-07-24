@@ -1,0 +1,13 @@
+id: extraction-get-booking-uuid
+tier: extraction
+description: "A booking lookup → get_booking with the booking_id extracted verbatim."
+input:
+  message: "Can you pull up booking 44444444-4444-4444-8444-444444444444 and its status?"
+expect:
+  kind: tool
+  tool: get_booking
+  args:
+    # booking_id is forwarded as the path param `id` (booking.ts:120); echoed under `id` (C5).
+    id: "44444444-4444-4444-8444-444444444444"
+recording:
+  provider: gemini

@@ -1,0 +1,13 @@
+id: extraction-hold-quote-uuid
+tier: extraction
+description: "A bare UUID + 'hold' → hold_quote with the quote_id extracted verbatim."
+input:
+  message: "Please hold quote 11111111-1111-4111-8111-111111111111 so we can book it."
+expect:
+  kind: tool
+  tool: hold_quote
+  args:
+    # quote_id is forwarded as the path param `id` (booking.ts:95); echoed under `id` (C5).
+    id: "11111111-1111-4111-8111-111111111111"
+recording:
+  provider: gemini

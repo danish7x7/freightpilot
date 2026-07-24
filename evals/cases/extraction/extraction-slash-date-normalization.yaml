@@ -1,0 +1,15 @@
+id: extraction-slash-date-normalization
+tier: extraction
+description: "A slash date (unambiguous, month-first stated) must normalize to ISO."
+input:
+  message: "AIR from USORD to DEFRA on 2026/09/09 — rates please."
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "USORD"
+    dest: "DEFRA"
+    mode: "AIR"
+    ship_date: "2026-09-09"
+recording:
+  provider: gemini

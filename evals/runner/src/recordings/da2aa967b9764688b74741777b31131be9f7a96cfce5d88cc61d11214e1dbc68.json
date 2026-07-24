@@ -1,0 +1,8 @@
+{
+  "eval_provider_error": {
+    "kind": "client",
+    "provider": "groq",
+    "status": 400,
+    "message": "groq client error (400): {\"error\":{\"message\":\"tool call validation failed: parameters for tool search_rates did not match schema: errors: [`/origin`: length must be \\u003e= 5, but got 4]\",\"type\":\"invalid_request_error\",\"code\":\"tool_use_failed\",\"failed_generation\":\"\\u003cfunction=search_rates\\u003e{\\\"origin\\\": \\\"LUNA\\\", \\\"de…"
+  }
+}

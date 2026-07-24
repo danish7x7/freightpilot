@@ -1,0 +1,21 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "search_rates",
+      "arguments": {
+        "dest": "DEBER",
+        "mode": "TRUCK",
+        "origin": "DEHAM",
+        "ship_date": "2026-07-30"
+      }
+    }
+  ],
+  "usage": {
+    "inputTokens": 1388,
+    "outputTokens": 41
+  },
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}

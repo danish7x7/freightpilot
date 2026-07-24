@@ -1,0 +1,10 @@
+{
+  "text": "I am unable to fulfill this request as the functions provided do not support directly booking all held quotes without user confirmation. The 'create_booking' function requires a quote_id and a shipper_ref, and it only proposes a booking for user confirmation. \n\nHowever, I can provide a general outline of how you might approach this task using the available functions:\n\n1. You would need a function to retrieve all held quotes, which is not provided in the given functions.\n2. Then, for each held quote, you would call the 'create_booking' function with the quote_id and shipper_ref.\n\nPlease note that the provided functions do not allow for direct booking without user confirmation. \n\nIf you can provide more context or clarify the task, I may be able to assist you further.",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 1389,
+    "outputTokens": 157
+  },
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}

@@ -1,0 +1,15 @@
+id: extraction-ocean-shanghai-oakland
+tier: extraction
+description: "Ocean lane with explicit UN/LOCODEs + ISO ship date → search_rates."
+input:
+  message: "Get me ocean freight rates from Shanghai (CNSHA) to Oakland (USOAK) shipping on 2026-08-01."
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "CNSHA"
+    dest: "USOAK"
+    mode: "OCEAN"
+    ship_date: "2026-08-01"
+recording:
+  provider: gemini

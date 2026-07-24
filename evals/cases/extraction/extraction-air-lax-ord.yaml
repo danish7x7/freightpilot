@@ -1,0 +1,15 @@
+id: extraction-air-lax-ord
+tier: extraction
+description: "Explicit AIR mode + codes + ISO date → search_rates."
+input:
+  message: "Search AIR rates from USLAX to USORD for ship date 2026-09-15."
+expect:
+  kind: tool
+  tool: search_rates
+  args:
+    origin: "USLAX"
+    dest: "USORD"
+    mode: "AIR"
+    ship_date: "2026-09-15"
+recording:
+  provider: gemini

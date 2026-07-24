@@ -1,0 +1,10 @@
+{
+  "text": "I am not able to execute this task as it requires a function that is not available in the given list.",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 1396,
+    "outputTokens": 23
+  },
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}
