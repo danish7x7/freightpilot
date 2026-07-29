@@ -44,8 +44,11 @@ export const shipmentJsonSchema = {
       required: ["weight_kg", "description"],
       properties: {
         pallets: { type: "integer", minimum: 1, maximum: 100 },
-        weight_kg: { type: "number", exclusiveMinimum: 0, maximum: 30000 },
-        volume_cbm: { type: "number", exclusiveMinimum: 0 },
+        // Gemini's function-declaration dialect has no `exclusiveMinimum`; use `minimum: 0`
+        // and carry the strict ">0" intent in `description`. Zod (cargoSchema, .gt(0)) stays
+        // the enforcement boundary — this fragment is only a hint to the model.
+        weight_kg: { type: "number", minimum: 0, maximum: 30000, description: "cargo weight in kg; must be greater than 0" },
+        volume_cbm: { type: "number", minimum: 0, description: "cargo volume in cbm; must be greater than 0" },
         description: { type: "string", maxLength: 500 },
       },
     },

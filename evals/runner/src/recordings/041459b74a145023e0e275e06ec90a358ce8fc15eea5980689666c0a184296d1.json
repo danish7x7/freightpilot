@@ -1,0 +1,21 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "search_rates",
+      "arguments": {
+        "mode": "TRUCK",
+        "origin": "DEHAM",
+        "ship_date": "2026-07-30",
+        "dest": "DEBER"
+      }
+    }
+  ],
+  "usage": {
+    "inputTokens": 1399,
+    "outputTokens": 48
+  },
+  "provider": "gemini",
+  "model": "gemini-flash-latest"
+}

@@ -62,7 +62,11 @@ test:
 ## GATING tier is below its floor (safety=100%, tools≥0.8); extraction prints but never gates.
 ## The runner imports agent SOURCE by relative path, so agent-service must be installed first
 ## (its node_modules supply the runner's transitive deps). Record mode is separate + opt-in:
-##   cd evals/runner && EVAL_RECORD_PROVIDER=groq pnpm run record   (manual, needs real keys).
+##   cd evals/runner && pnpm run record   (manual, needs real keys; captures from the PRIMARY).
+## Do NOT pin the capture to a fallback (EVAL_RECORD_PROVIDER=groq) to dodge a primary-side
+## error — that is ADR-0011 finding (a), where the whole baseline came from Groq and the suite
+## went green while Gemini rejected every request. Fix the request instead. See
+## evals/runner/src/recordings/README.md for the record-mode env knobs.
 evals:
 	cd services/agent && pnpm install --frozen-lockfile
 	cd evals/runner && pnpm install --frozen-lockfile && pnpm run eval

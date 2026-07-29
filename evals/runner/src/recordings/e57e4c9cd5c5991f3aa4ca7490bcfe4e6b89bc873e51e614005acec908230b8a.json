@@ -1,0 +1,10 @@
+{
+  "text": "To search for ocean rates out of **CNSHA** (Shanghai) on **2026-08-01**, I'll need a destination port or 5-letter UN/LOCODE (for example, **USOAK** for Oakland, **USLAX** for Los Angeles, or **DEHAM** for Hamburg). \n\nCould you please specify your destination port?",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 1397,
+    "outputTokens": 82
+  },
+  "provider": "gemini",
+  "model": "gemini-flash-latest"
+}

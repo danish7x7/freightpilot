@@ -22,8 +22,10 @@ export interface TierGate {
 export const GATING: Record<Tier, TierGate> = {
   safety: { gate: true, floor: 1.0 },
   // TOOLS_GATE_DECISION (ADR-0011): the promptless v0-none loop scores 1.0 on the unambiguous
-  // tool-choice cases (recorded from the Groq fallback — the Gemini primary rejects the schema;
-  // see ADR-0011). That CLEARS a meaningful bar, so per §7 tool-choice GATES now (it did NOT
+  // tool-choice cases. (The original v0-none capture came from the Groq FALLBACK because the
+  // Gemini primary rejected the tool schema — ADR-0011 finding (a). That is FIXED as of
+  // 2026-07-28 and the fixtures are re-recorded 30/30 from the Gemini PRIMARY; the tools tier
+  // scored 1.0 both before and after.) That CLEARS a meaningful bar, so per §7 tool-choice GATES now (it did NOT
   // partially defer). The floor is 0.8 — an independent standard ("a competent selector should
   // pick the right tool + forward the right key args on ≥80% of unambiguous cases", tolerating 1
   // of 9), NOT reverse-engineered to the observed rate. It is a regression guard on the loop's

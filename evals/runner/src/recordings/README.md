@@ -21,6 +21,21 @@ Manual, opt-in, needs real free-tier keys in `services/agent/.env` (never commit
 cd evals/runner && pnpm run record      # EVAL_RECORD=1 tsx src/run.ts
 ```
 
+Capture is paced two ways so a bulk run stays inside the free tier (both record-mode ONLY —
+strict no-ops in replay/CI):
+
+| env | default | what it paces |
+|---|---|---|
+| `EVAL_RECORD_RPM` | `12` | requests/min WITHIN a case (token bucket, capacity 1) |
+| `EVAL_RECORD_DELAY_MS` | `5000` | sleep BETWEEN cases (multi-turn cases fire several calls each) |
+| `EVAL_RECORD_PROVIDER` | primary | chain entry to capture from, BY NAME — override only |
+
+`EVAL_RECORD_PROVIDER` exists for one-off comparison captures. Do not reach for it to work around
+a primary-side error: capturing the baseline from the fallback is precisely ADR-0011 finding (a),
+where `exclusiveMinimum` 400'd Gemini non-retryably and 30 fixtures came from Groq while the suite
+reported green. Fix the request instead. `test/recordingProvenance.test.ts` now fails if the
+committed set is anything other than single-provider Gemini.
+
 Record mode wraps the **real** primary provider so recordings reflect real normalization. Only the
 normalized `ChatResponse` fields are persisted (no auth headers, no API keys, no Gemini
 `thoughtSignature` — those live below the normalization seam). Record mode **never runs in PR CI**.
