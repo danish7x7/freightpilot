@@ -7,8 +7,13 @@ import { ConfigError } from "./errors.js";
  * Switching provider/model is a redeploy with new env — zero code change.
  *
  * LLM_CHAIN is a comma-separated list of `provider:model` pairs (matches the root
- * .env.example and §6.1 exactly), e.g.:
- *   LLM_CHAIN=gemini:gemini-2.5-flash,groq:llama-3.3-70b-versatile,cerebras:llama-3.3-70b
+ * .env.example), e.g. the ADR-0007 live-verified chain:
+ *   LLM_CHAIN=gemini:gemini-flash-latest,groq:llama-3.3-70b-versatile
+ *
+ * ADR-0007 supersedes §6.1's committed defaults: `gemini-2.5-flash` 404s for new API keys, and
+ * Cerebras 402s for every model on a free-tier account — so the primary is the rotation-resilient
+ * ALIAS and there is no live Cerebras slot (the provider class + its fixtures still exist, since
+ * one OpenAI-compatible class serving several base URLs is the point of ADR-0006).
  */
 
 export type ProviderKind = "gemini" | "openai-compat";
@@ -71,7 +76,7 @@ export function loadLlmConfig(env: NodeJS.ProcessEnv = process.env): LlmConfig {
   const raw = env.LLM_CHAIN?.trim();
   if (!raw) {
     throw new ConfigError(
-      "LLM_CHAIN is required (e.g. gemini:gemini-2.5-flash,groq:llama-3.3-70b-versatile)",
+      "LLM_CHAIN is required (e.g. gemini:gemini-flash-latest,groq:llama-3.3-70b-versatile)",
     );
   }
 
