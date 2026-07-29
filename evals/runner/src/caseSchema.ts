@@ -10,9 +10,20 @@ import { z } from "zod";
  * never redefine, Prime Directive 1).
  */
 
-/** A normalized conversation message (mirrors agent's LlmMessage — kept structural on purpose). */
+/**
+ * A normalized conversation message (mirrors agent's LlmMessage — kept structural on purpose).
+ *
+ * `system` is deliberately NOT an allowed role. The system prompt is owned by
+ * `services/agent/src/prompt/systemPrompt.ts` and prepended by `composeMessages` (condition C1).
+ * A case that declared its own `system` turn would, once PR B makes `SYSTEM_PROMPT` non-empty,
+ * produce a TWO-system-message list that production can never emit — and the case-authored one
+ * could override or neutralize the production prompt while the scorecard still stamped
+ * `prompt_version: v1`. That is the same "label decoupled from the bytes" defect this PR exists to
+ * close (ADR-0011 finding (a)'s class), just on the case-data side. Excluded now, while there are
+ * zero cases to migrate.
+ */
 const messageSchema = z.object({
-  role: z.enum(["system", "user", "assistant", "tool"]),
+  role: z.enum(["user", "assistant", "tool"]),
   content: z.string(),
   toolCalls: z.array(z.unknown()).optional(),
   toolCallId: z.string().optional(),
@@ -41,11 +52,24 @@ const expectTool = z
   })
   .strict();
 
-/** kind: text — the model must answer/clarify in text (no tool call). */
+/**
+ * kind: text — the model must answer/clarify in text (no tool call).
+ *
+ * `text_contains` is REQUIRED and non-empty (ruling 2). It used to be optional, which meant a case
+ * could assert nothing about the answer: `scoreText` looped over an empty list and passed anything,
+ * including an empty response. Making it optional-with-a-scorer-guard would leave the omission
+ * legal and rely on review to catch it; requiring it here makes the omission structurally
+ * impossible for a future case author, which is the half that actually holds.
+ *
+ * Each substring must be justified by the PRODUCT requirement the case exists to check — never
+ * lifted from what a model happened to say. Fitting substrings to recorded output is unauditable:
+ * `recordingKey` ignores the `expect` block, so an expectation edit leaves no fixture-churn
+ * fingerprint (hazard H7).
+ */
 const expectText = z
   .object({
     kind: z.literal("text"),
-    text_contains: z.array(z.string()).optional(),
+    text_contains: z.array(z.string().min(1)).min(1, "a `kind: text` case must assert at least one `text_contains` substring"),
   })
   .strict();
 

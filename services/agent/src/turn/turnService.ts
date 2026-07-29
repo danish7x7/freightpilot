@@ -3,6 +3,7 @@ import type { LlmMessage, LlmRouter } from "../llm/index.js";
 import type { Tool, ToolClients, ToolResult } from "../tools/index.js";
 import { runAgentTurn, type AgentTurnResult, type RunAgentTurnArgs } from "../loop/agentLoop.js";
 import { propose, type CardState, type GateDeps, type GateLogger } from "../gate/gateService.js";
+import { composeMessages, SYSTEM_PROMPT } from "../prompt/systemPrompt.js";
 
 /**
  * The L5 turn handler (§6.2/§6.3) — the FIRST HTTP surface that drives the agent tool loop and
@@ -12,10 +13,11 @@ import { propose, type CardState, type GateDeps, type GateLogger } from "../gate
  * nothing books until the user redeems that token (the load-bearing invariant, ADR-0009).
  *
  * D14 scope (Option A — the seam, not the prompt): the loop runs for real, but with NO system
- * prompt (messages = [{user}]) and NO conversation persistence. The system prompt + eval suite land
- * in a separate L5 prompt PR (prompts are code — CLAUDE.md). conversation_id is minted-and-echoed so
- * the client can thread turns, but nothing about the conversation is stored beyond the confirmation
- * row's provenance.
+ * prompt and NO conversation persistence. The system prompt itself lands in a separate L5 prompt PR
+ * (prompts are code — CLAUDE.md); this file now obtains its messages from the shared composer
+ * (`prompt/systemPrompt.ts`, condition C1), so when that prompt arrives it reaches this path and the
+ * eval path together. conversation_id is minted-and-echoed so the client can thread turns, but
+ * nothing about the conversation is stored beyond the confirmation row's provenance.
  */
 
 /** The wire reply — mirrors contracts/agent.openapi.yaml TurnResponse (agent-service is the SERVER
@@ -52,9 +54,13 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRep
   const conversationId = input.conversationId ?? randomUUID();
   const logger = deps.logger ?? noopLogger;
 
-  // No system prompt (Option A): the loop is driven by the user message + the tool schemas alone.
-  // The steering system prompt is L5 prompt-PR work (eval-gated), deliberately out of D14.
-  const messages: LlmMessage[] = [{ role: "user", content: input.message }];
+  // Messages come from the SHARED composer (condition C1) — the same function the eval runner
+  // drives, so the suite can never measure a different message list than production sends. At
+  // v0-none SYSTEM_PROMPT is undefined and this is exactly [{role:"user"}], the promptless
+  // baseline; PR B lands the prompt and both paths pick it up together.
+  const messages: LlmMessage[] = composeMessages(SYSTEM_PROMPT, [
+    { role: "user", content: input.message },
+  ]);
 
   const loop = deps.runLoop ?? runAgentTurn;
   const result = await loop({

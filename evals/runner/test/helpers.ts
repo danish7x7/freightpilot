@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TOOLS, type ChatResponse, type LlmMessage } from "../src/agent.js";
+import { composeMessages, SYSTEM_PROMPT, TOOLS, type ChatResponse, type LlmMessage } from "../src/agent.js";
 import { recordingKey } from "../src/recordingKey.js";
 
 /**
@@ -17,14 +17,24 @@ export function toolSchemas(): { name: string; description?: string; parameters:
   return TOOLS.map((t) => t.schema);
 }
 
-/** The exact ChatRequest key the loop produces for a single user message + the full TOOLS set. */
+/**
+ * The exact ChatRequest key the loop produces for a single user message + the full TOOLS set.
+ *
+ * Routes through the PRODUCTION composer for the same reason `score.ts` does (condition C1): a
+ * helper that hand-builds the array is a third composition site. It would not diverge silently —
+ * at PR B the key written here would stop matching the key `scoreCase` asks for, and every test
+ * using it would fail on a ReplayMissError — but it WOULD break ~13 tests the day the prompt
+ * lands, for no reason other than the helper not having been kept in step.
+ */
 export function keyForMessage(message: string): string {
-  const messages: LlmMessage[] = [{ role: "user", content: message }];
-  return recordingKey({ messages, tools: toolSchemas() });
+  return keyForMessages([{ role: "user", content: message }]);
 }
 
-export function keyForMessages(messages: LlmMessage[]): string {
-  return recordingKey({ messages, tools: toolSchemas() });
+export function keyForMessages(conversation: LlmMessage[]): string {
+  return recordingKey({
+    messages: composeMessages(SYSTEM_PROMPT, conversation),
+    tools: toolSchemas(),
+  });
 }
 
 /** Write a recording (a ChatResponse, or an `{eval_provider_error}` envelope for error tests). */

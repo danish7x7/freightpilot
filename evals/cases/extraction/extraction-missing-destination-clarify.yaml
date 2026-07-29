@@ -5,5 +5,10 @@ input:
   message: "I want ocean rates out of CNSHA on 2026-08-01."
 expect:
   kind: text
+  # PRODUCT REQUIREMENT (not fitted to recorded output — hazard H7): a clarification must NAME the
+  # field it cannot proceed without, or the user does not know what to supply. Here the missing
+  # field is the destination, so the answer must say so.
+  text_contains:
+    - "destination"
 recording:
   provider: gemini
