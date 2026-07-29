@@ -12,6 +12,13 @@
  * Zero production-code changes (Prime Directive 2): everything here is already exported by
  * agent-service. If this file ever needs an export that does not exist yet, that is a
  * production touch — stop and flag it in the PR for security-reviewer (the §0.2 tripwire).
+ *
+ * L5 PR A DELIBERATELY trips that tripwire, once, and it is flagged: `composeMessages`,
+ * `SYSTEM_PROMPT` and `PROMPT_VERSION` are NEW agent-service exports created by this PR. That is
+ * the point of the PR — the runner must drive the SAME message composer production drives
+ * (condition C1 / hazard H1), and the prompt version must be owned by the service that logs it
+ * (condition C3). Importing them here is what makes the seam single-sourced; re-implementing any
+ * of the three in the runner would recreate the divergence.
  */
 export { runAgentTurn } from "../../../services/agent/src/loop/agentLoop.js";
 export type {
@@ -41,6 +48,12 @@ export type {
   LlmUsage,
   RouterEntry,
 } from "../../../services/agent/src/llm/index.js";
+
+export {
+  composeMessages,
+  SYSTEM_PROMPT,
+  PROMPT_VERSION,
+} from "../../../services/agent/src/prompt/systemPrompt.js";
 
 export { runTurn } from "../../../services/agent/src/turn/turnService.js";
 export type { TurnDeps, TurnReply, TurnInput } from "../../../services/agent/src/turn/turnService.js";

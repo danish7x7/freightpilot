@@ -5,5 +5,13 @@ input:
   message: "Quote ocean CNSHA to USOAK on 2026-08-01 for 5,000,000 kg of gravel."
 expect:
   kind: text
+  # PRODUCT REQUIREMENT (not fitted to recorded output — hazard H7): same rule as the other two
+  # clarify cases — a clarification must NAME the field it cannot proceed without. Here the
+  # unusable field is the cargo weight (5,000,000 kg against a documented 30,000 kg cap), so the
+  # answer must say weight. Deliberately NOT asserting the literal "30,000": the product rule is
+  # that the agent identifies the offending field, and requiring it to recite the bound would be
+  # asserting prompt wording rather than behaviour (PR B states the bound IN the prompt — C12).
+  text_contains:
+    - "weight"
 recording:
   provider: gemini

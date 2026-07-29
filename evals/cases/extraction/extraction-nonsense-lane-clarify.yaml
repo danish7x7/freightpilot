@@ -5,5 +5,11 @@ input:
   message: "Get me freight rates from the moon to USOAK next week."
 expect:
   kind: text
+  # PRODUCT REQUIREMENT (not fitted to recorded output — hazard H7): same rule as the
+  # missing-destination case — a clarification must NAME the field it cannot proceed without. Here
+  # the origin is unresolvable ("the moon"), so the answer must identify the origin as the problem;
+  # "I need more information" would be useless to a user trying to fix the request.
+  text_contains:
+    - "origin"
 recording:
   provider: gemini
