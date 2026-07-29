@@ -62,9 +62,18 @@ export async function runEvals(opts: RunOptions): Promise<RunResult> {
   const router = buildEvalRouter(opts.mode, opts.recordingsDir);
   const deps: ScoreDeps = { makeRouter: () => router };
 
+  // Record mode ONLY: space live capture between cases so a burst of sequential Gemini calls
+  // (multi-turn cases fire several per case) stays under the free-tier per-minute quota — the
+  // record TokenBucket already paces calls WITHIN a case (EVAL_RECORD_RPM); this adds the
+  // between-case spacing. Env-tunable via EVAL_RECORD_DELAY_MS (default 5000). In replay/CI
+  // (mode !== "record") it is a STRICT no-op: zero added latency, and nothing about which cases
+  // run, what gets recorded, the recording key, or the scorecard changes.
+  const interCaseDelayMs = opts.mode === "record" ? recordDelayMs() : 0;
+
   const results: ScoreResult[] = [];
-  for (const c of cases) {
-    results.push(await scoreCase(c, deps));
+  for (let i = 0; i < cases.length; i++) {
+    if (i > 0 && interCaseDelayMs > 0) await sleep(interCaseDelayMs);
+    results.push(await scoreCase(cases[i], deps));
   }
 
   const scorecard = buildScorecard(results);
@@ -88,6 +97,18 @@ export async function runEvals(opts: RunOptions): Promise<RunResult> {
   }
 
   return { exitCode, scorecard, results, scorecardPath };
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Inter-case record pacing (ms). EVAL_RECORD_DELAY_MS overrides; default 5000. Only consulted
+ * on the record path (see runEvals) — never affects replay/CI. A negative/NaN value falls back
+ * to the default so a typo can't disable pacing. */
+function recordDelayMs(): number {
+  const raw = process.env.EVAL_RECORD_DELAY_MS?.trim();
+  if (raw === undefined || raw === "") return 5000;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 5000;
 }
 
 function gatedFailures(card: Scorecard, gating: Record<Tier, TierGate>): string[] {
@@ -122,7 +143,9 @@ function printReport(
   // §7: report the actual promptless tool-choice number prominently, whatever the gate decides.
   log(`  >> promptless tool-choice pass_rate = ${card.tiers.tools.pass_rate} (${PROMPT_VERSION} baseline)`);
   if (card.pending.length > 0) {
-    log(`  pending (recorded but not scored — visible gaps):`);
+    // "declared", not "recorded": a pending case is never driven, so it has no fixture and never
+    // had one. Saying "recorded" inside the runner's own honesty report would be a false claim.
+    log(`  pending (declared but not scored — visible gaps):`);
     for (const p of card.pending) log(`      PENDING ${p.id}: ${p.reason}`);
   }
 }
@@ -130,14 +153,14 @@ function printReport(
 function buildEvalRouter(mode: ReplayMode, recordingsDir: string): LlmRouterType {
   if (mode === "record") {
     const config = loadLlmConfig();
-    // Which chain entry to capture from. Defaults to the primary; EVAL_RECORD_PROVIDER selects a
-    // specific one BY NAME. This override exists because the recordings are provider-agnostic (the
-    // key excludes provider — §3) AND because the primary (Gemini) currently rejects the shipment
-    // tool schema: shipmentJsonSchema uses `exclusiveMinimum`, which Gemini's function-declaration
-    // dialect does not accept (400, non-retryable → no fallback). That is a LATENT PRODUCTION gap,
-    // flagged for the L5/debugger follow-up (see ADR-0011) — NOT fixed here (harness makes zero
-    // production changes). Until it is fixed, capture the v0-none baseline from the OpenAI-compatible
-    // fallback (EVAL_RECORD_PROVIDER=groq).
+    // Which chain entry to capture from. Captures from the PRIMARY (chain[0], Gemini per ADR-0007)
+    // by default — that is the correct provenance for a committed baseline, and the current fixture
+    // set is 30/30 Gemini. EVAL_RECORD_PROVIDER selects a different entry BY NAME; it is a
+    // DELIBERATE OVERRIDE for one-off comparison captures only, never the normal path. Reaching for
+    // it to dodge a primary-side error is how a baseline goes silently green on the fallback: that
+    // is exactly what ADR-0011 finding (a) was (`exclusiveMinimum` 400'd Gemini non-retryably, so
+    // every fixture came from Groq and the primary's rejection hid). Finding (a) is FIXED — if the
+    // primary 400s again, fix the request, do not re-point the capture.
     const want = process.env.EVAL_RECORD_PROVIDER;
     const picked = (want && config.chain.find((c) => c.name === want)) || config.chain[0];
     const inner: LlmProvider = createProvider(picked, config.timeoutMs);

@@ -252,3 +252,14 @@ jobs:
       # (nondeterministic → kept out of the merge gate; see ADR-0011).
       - name: Replay evals + gate (tool-choice + safety)
         run: make evals
+
+      # The runner's OWN unit tests must gate too — they are where several load-bearing
+      # guarantees actually live, and none of them can block a merge unless CI runs them:
+      # gate.test.ts (ADR-0011 §Decision 3 cites it as the stand-in for the deferred
+      # break-the-prompt proof), toolClassification.test.ts (score.ts trips it when a new
+      # booking-mutating tool is added), and recordingProvenance.test.ts (fails if the committed
+      # fixtures were captured from anything but the primary — the ADR-0011 finding (a)
+      # anti-recurrence guard). Hermetic: no network, no secrets. `make evals` installed both
+      # workspaces already, so this reuses them.
+      - name: Runner unit tests (gate mechanism + provenance guards)
+        run: cd evals/runner && pnpm test

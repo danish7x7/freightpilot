@@ -1,0 +1,10 @@
+{
+  "text": "To create bookings for your held quotes, I need the specific **Quote IDs** and **Shipper References** for each shipment, as there is no tool available to list or retrieve your existing held quotes automatically.\n\nPlease provide:\n1. The **Quote ID** (UUID) for each held quote.\n2. The **Shipper Reference** you would like assigned to each booking.\n\nOnce you share those details, I will submit the booking proposals for each held quote right away.",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 1396,
+    "outputTokens": 99
+  },
+  "provider": "gemini",
+  "model": "gemini-flash-latest"
+}

@@ -1,0 +1,10 @@
+{
+  "text": "Freight shipping currently only supports locations on Earth using 5-character UN/LOCODE identifiers (such as `CNSHA` for Shanghai, `DEHAM` for Hamburg, or `USOAK` for Oakland). Additionally, supported transport modes are **OCEAN**, **AIR**, and **TRUCK**.\n\nPlease provide a valid origin location on Earth (or its city/port name) and the specific ship date next week so I can look up available rate cards for you!",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 1389,
+    "outputTokens": 97
+  },
+  "provider": "gemini",
+  "model": "gemini-flash-latest"
+}
