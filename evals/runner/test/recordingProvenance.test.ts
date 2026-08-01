@@ -30,7 +30,10 @@ const recordingsDir = fileURLToPath(new URL("../src/recordings", import.meta.url
 
 interface Recording {
   provider?: string;
+  /** What we ASKED for: the configured alias, echoed back. */
   model?: string;
+  /** What ANSWERED: read off the response body. See the servedModel test below. */
+  servedModel?: string;
   /** An error envelope persists its provider one level down — see replayProvider.ts. */
   eval_provider_error?: { provider?: string };
 }
@@ -82,5 +85,41 @@ describe("committed recordings' provenance", () => {
       .filter(({ body }) => typeof body.model !== "string" || body.model.length === 0)
       .map(({ file }) => file);
     expect(unlabelled).toEqual([]);
+  });
+
+  /**
+   * The SERVED model, which is a different claim from the one above and the one that matters.
+   *
+   * `model` is the configured alias echoed back: every committed recording says
+   * `gemini-flash-latest` because that is the string we sent, not because anything checked what
+   * answered. ADR-0007 pins the primary to that alias, its backing model has already rotated once
+   * (to a thinking model) with no line changing in this repo, and Amendment A5 requires a re-record
+   * rather than a re-run when it does. Comparing `gemini-flash-latest` to `gemini-flash-latest`
+   * cannot see that, so this asserts the resolved version is present in the bytes.
+   *
+   * What this test does and does not give you: it makes a rotation AUDITABLE after the fact, by
+   * guaranteeing the resolved version is on disk to be compared. It does not DETECT one. Record
+   * mode skips any key that already has a fixture, so an unchanged prompt means an unchanged key
+   * means a re-record that calls nothing. Purging the recordings is still the operator's job.
+   *
+   * WRITTEN STRICTLY AND EXPECTED RED UNTIL THE v1 CAPTURE. No v0-none recording carries the field,
+   * because the field did not exist when they were captured, and those fixtures are about to be
+   * invalidated wholesale by the PROMPT_VERSION bump anyway. Relaxing this to "assert only where
+   * present" would make it pass today and pass forever afterwards on a set that has silently lost
+   * the field, which is the defect it exists to catch.
+   */
+  test("every non-error recording names the SERVED model, not just the requested alias", () => {
+    const unlabelled = committedRecordings()
+      .filter(({ body }) => body.eval_provider_error === undefined)
+      .filter(({ body }) => typeof body.servedModel !== "string" || body.servedModel.length === 0)
+      .map(({ file }) => file);
+
+    expect(
+      unlabelled,
+      `${unlabelled.length} non-error recording(s) carry no servedModel.\n` +
+        "  Before the v1 capture this is EXPECTED: the field postdates the v0-none fixtures.\n" +
+        "  After the capture, a name here means the adapter or sanitizeResponse stopped\n" +
+        "  forwarding it and the fixture set has lost its provenance.",
+    ).toEqual([]);
   });
 });

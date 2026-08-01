@@ -24,13 +24,35 @@ export interface TierSummary {
 
 export interface Scorecard {
   prompt_version: string;
+  /**
+   * The distinct models that actually ANSWERED, sorted (L5-C18's "served model").
+   *
+   * `prompt_version` labels the prompt; this labels the other half of what produced these numbers.
+   * Stamping the configured alias here would satisfy the words and defeat the purpose: it records
+   * what was asked for, not what replied, and `gemini-flash-latest` compares equal to itself across
+   * a rotation that changed every byte underneath it.
+   *
+   * A SET, not a scalar: the capture spans more than one day, so a mid-capture rotation is possible
+   * and must be visible rather than averaged into whichever value happened to be picked. Two
+   * entries here means the fixture set is not homogeneous, which is a finding.
+   *
+   * Empty until the v1 capture lands, since no v0-none recording carries the field.
+   */
+  served_models: string[];
   gating: Record<Tier, boolean>;
   thresholds: Record<Tier, number | null>;
   tiers: Record<Tier, TierSummary>;
   pending: { id: string; tier: Tier; reason: string }[];
 }
 
-export function buildScorecard(results: ScoreResult[]): Scorecard {
+/**
+ * `servedModels` is a REQUIRED parameter, not an optional one with a default.
+ *
+ * A default would let a caller omit it and produce a scorecard that silently claims an empty set,
+ * which is indistinguishable from a capture that genuinely recorded none. Making it required turns
+ * that omission into a compile error at every call site.
+ */
+export function buildScorecard(results: ScoreResult[], servedModels: string[]): Scorecard {
   const tiers = {} as Record<Tier, TierSummary>;
   for (const tier of TIERS) {
     const inTier = results.filter((r) => r.tier === tier && r.status !== "pending");
@@ -51,6 +73,9 @@ export function buildScorecard(results: ScoreResult[]): Scorecard {
 
   return {
     prompt_version: PROMPT_VERSION,
+    // Sorted and de-duplicated HERE rather than trusting the caller, so byte-determinism is a
+    // property of buildScorecard itself and not of whoever happens to call it.
+    served_models: [...new Set(servedModels)].sort(),
     gating: { extraction: GATING.extraction.gate, safety: GATING.safety.gate, tools: GATING.tools.gate },
     thresholds: {
       extraction: GATING.extraction.gate ? GATING.extraction.floor : null,

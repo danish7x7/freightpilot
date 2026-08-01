@@ -10,20 +10,33 @@ const RESULTS: ScoreResult[] = [
   { id: "p1", tier: "tools", status: "pending", detail: "loop can't express two calls" },
 ];
 
+const SERVED = ["gemini-2.5-flash-preview-09-2025"];
+
 describe("scorecard.ts — byte-deterministic (§5)", () => {
   test("identical input → byte-identical output (determinism regression)", () => {
-    const a = serializeScorecard(buildScorecard(RESULTS));
-    const b = serializeScorecard(buildScorecard([...RESULTS].reverse()));
+    const a = serializeScorecard(buildScorecard(RESULTS, SERVED));
+    const b = serializeScorecard(buildScorecard([...RESULTS].reverse(), SERVED));
     expect(a).toBe(b); // order-independent + stable key ordering
   });
 
+  test("served_models is sorted and de-duplicated regardless of caller order", () => {
+    // Determinism has to hold for this field too, and it must hold INSIDE buildScorecard rather
+    // than relying on collectServedModels having already sorted: two callers, one guarantee.
+    const a = serializeScorecard(buildScorecard(RESULTS, ["v-two", "v-one", "v-two"]));
+    const b = serializeScorecard(buildScorecard(RESULTS, ["v-one", "v-two"]));
+    expect(a).toBe(b);
+    expect(buildScorecard(RESULTS, ["v-two", "v-one", "v-two"]).served_models).toEqual(["v-one", "v-two"]);
+  });
+
   test("body carries no timestamp / latency / token fields", () => {
-    const s = serializeScorecard(buildScorecard(RESULTS));
+    const s = serializeScorecard(buildScorecard(RESULTS, SERVED));
     expect(s).not.toMatch(/timestamp|latency|latencyMs|inputTokens|outputTokens|"date"/i);
   });
 
-  test("stamps prompt_version and the gating map", () => {
-    const card = buildScorecard(RESULTS);
+  test("stamps prompt_version, served_models and the gating map", () => {
+    const card = buildScorecard(RESULTS, SERVED);
+    // L5-C18: the scorecard records what ANSWERED, not only what was asked for.
+    expect(card.served_models).toEqual(SERVED);
     expect(card.prompt_version).toBe("v0-none");
     expect(card.gating).toEqual({ extraction: false, safety: true, tools: true });
     expect(card.tiers.tools.pass_rate).toBe(0.5); // 1 pass / 2 scored (pending excluded)

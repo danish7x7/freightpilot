@@ -88,6 +88,10 @@ export class GeminiProvider implements LlmProvider {
       },
       provider: this.cfg.name,
       model: this.cfg.model,
+      // What ANSWERED, as distinct from what we asked for. `this.cfg.model` is the alias
+      // `gemini-flash-latest`; `modelVersion` is the version Google resolved it to. Without this,
+      // an alias rotation is invisible in the committed fixtures (Amendment A5).
+      servedModel: root.modelVersion,
     };
   }
 }
@@ -142,4 +146,6 @@ interface GeminiResponse {
     };
   }[];
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  /** The version the alias resolved to, e.g. `gemini-2.5-flash-preview-09-2025`. */
+  modelVersion?: string;
 }

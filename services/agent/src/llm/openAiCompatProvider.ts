@@ -94,6 +94,12 @@ export class OpenAiCompatProvider implements LlmProvider {
       },
       provider: this.cfg.name,
       model: this.cfg.model,
+      // OpenAI-compatible responses carry a top-level `model`. MEASURED 2026-07-31 against Groq
+      // with one live call: it ECHOES the requested id rather than resolving it, so today this
+      // equals `model` and adds no information. Read anyway, because the alternative is asserting
+      // an absence: with the field captured, a provider that starts resolving shows up in the
+      // bytes, and the echo is visible as an echo rather than inferred.
+      servedModel: root.model,
     };
   }
 }
@@ -134,4 +140,6 @@ interface OpenAiResponse {
     };
   }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
+  /** The model the provider says served the request. Groq echoes what was requested. */
+  model?: string;
 }

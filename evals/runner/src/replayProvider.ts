@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { LlmError, type ChatRequest, type ChatResponse, type LlmErrorKind, type LlmProvider, type NormalizedToolCall } from "./agent.js";
 import { recordingKey } from "./recordingKey.js";
@@ -120,6 +120,12 @@ export class ReplayProvider implements LlmProvider {
  * scripts/record-fixtures.ts). Tool-call ids are synthesized by the adapter (Gemini sends none),
  * so we PIN them to `call_<i>` — they carry no meaning downstream (the loop only echoes them) and
  * pinning keeps committed recordings byte-stable across re-records.
+ *
+ * THIS IS AN ALLOWLIST, and that is the hazard: a field the adapter parses but this function does
+ * not name is silently dropped at record time. It would look captured in the type and be absent
+ * from every committed byte, which is the same class of defect as a label decoupled from what it
+ * labels. `servedModel` is forwarded here for that reason, and a mutation test drops this line
+ * specifically to prove the omission is loud rather than invisible.
  */
 export function sanitizeResponse(res: ChatResponse): ChatResponse {
   return {
@@ -130,7 +136,44 @@ export function sanitizeResponse(res: ChatResponse): ChatResponse {
     usage: { inputTokens: res.usage?.inputTokens ?? 0, outputTokens: res.usage?.outputTokens ?? 0 },
     provider: res.provider,
     model: res.model,
+    servedModel: res.servedModel,
   };
+}
+
+/**
+ * The DISTINCT served models across the committed recordings, sorted.
+ *
+ * A set rather than a scalar, deliberately. The v1 capture is budgeted to span more than one day
+ * against a daily-capped free tier, so the alias can rotate PART WAY THROUGH it. A single string
+ * would have to pick a winner and would therefore be false for some of the fixtures it claims to
+ * describe, hiding the exact event this field exists to surface. A set of two is a loud, readable
+ * signal that the capture is not homogeneous.
+ *
+ * Reads the WHOLE DIRECTORY rather than tracking which fixtures a given run consumed. In
+ * replay/CI that is sound and equivalent: `fixtureCompleteness`'s orphan test forbids a fixture no
+ * case claims, and it runs in the same CI job as `make evals`, so a divergent directory cannot
+ * merge green. In RECORD mode nothing enforces it, and there the difference is live: a stale
+ * orphan from a superseded key contributes to the union indistinguishably from a genuine
+ * mid-capture rotation. Both show up as a two-element set, which is the signal this function
+ * exists to make loud, so the operator meets the false positive during capture and before the
+ * orphan test can speak. A two-element set during a capture means "look at the directory", not
+ * "the alias rotated".
+ *
+ * Error envelopes are skipped explicitly. This is DEFENCE IN DEPTH rather than a load-bearing
+ * branch: they persist {kind, provider, status, message} and never carried a model, so the
+ * non-empty-string guard below would exclude them anyway. Deleting this line breaks no test.
+ */
+export function collectServedModels(recordingsDir: string): string[] {
+  if (!existsSync(recordingsDir)) return [];
+  const seen = new Set<string>();
+  for (const file of readdirSync(recordingsDir)) {
+    if (!file.endsWith(".json")) continue;
+    const body: unknown = JSON.parse(readFileSync(join(recordingsDir, file), "utf8"));
+    if (isErrorRecording(body)) continue;
+    const served = (body as ChatResponse).servedModel;
+    if (typeof served === "string" && served.length > 0) seen.add(served);
+  }
+  return [...seen].sort();
 }
 
 function describeRequest(req: ChatRequest): string {

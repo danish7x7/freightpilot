@@ -9,7 +9,7 @@ import {
   type LlmRouter as LlmRouterType,
 } from "./agent.js";
 import { loadCases } from "./loadCases.js";
-import { ReplayProvider, type ReplayMode } from "./replayProvider.js";
+import { collectServedModels, ReplayProvider, type ReplayMode } from "./replayProvider.js";
 import { scoreCase, type ScoreDeps, type ScoreResult, type Tier } from "./score.js";
 import { buildScorecard, writeScorecard, type Scorecard } from "./scorecard.js";
 import { GATING } from "./gating.js";
@@ -76,7 +76,10 @@ export async function runEvals(opts: RunOptions): Promise<RunResult> {
     results.push(await scoreCase(cases[i], deps));
   }
 
-  const scorecard = buildScorecard(results);
+  // Read AFTER the loop so record mode's stamp includes what it just captured. Note it is the whole
+  // committed directory, not this run's consumption set: see collectServedModels on why those two
+  // are equivalent in replay/CI and can diverge during a capture.
+  const scorecard = buildScorecard(results, collectServedModels(opts.recordingsDir));
   printReport(scorecard, results, opts.mode, gating, log);
 
   let scorecardPath: string | undefined;

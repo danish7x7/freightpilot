@@ -39,3 +39,34 @@ committed set is anything other than single-provider Gemini.
 Record mode wraps the **real** primary provider so recordings reflect real normalization. Only the
 normalized `ChatResponse` fields are persisted (no auth headers, no API keys, no Gemini
 `thoughtSignature` — those live below the normalization seam). Record mode **never runs in PR CI**.
+
+### `servedModel`: what answered, versus `model`, what we asked for
+
+`model` is the configured alias echoed back from `LLM_CHAIN`, so every Gemini recording reads
+`gemini-flash-latest` whatever ran underneath it. `servedModel` is read from the response itself
+(Gemini's `modelVersion`; the top-level `model` on OpenAI-compatible providers) and records the
+version that actually served. The scorecard stamps the sorted distinct set as `served_models`, so a
+capture that spans a rotation shows **two** entries rather than silently picking one.
+
+Measured 2026-07-31: **Groq echoes the requested id** rather than resolving it, so on the Groq leg
+`servedModel` equals `model` and adds nothing. That is a known asymmetry, not a bug. It is captured
+anyway so the echo is visible as an echo, and so a provider that later starts resolving needs no
+envelope change.
+
+### Re-baselining after an alias rotation: purge first
+
+**`pnpm run record` will NOT refresh existing recordings.** Record mode skips any key that already
+has a fixture, which is what makes an interrupted capture resumable without re-paying for cases
+already captured. The consequence: if the alias rotates but the prompt does not, every key is
+unchanged, a re-record makes **zero live calls**, and the stale bytes survive while `served_models`
+keeps stamping the old version confidently.
+
+ADR-0011 Amendment A5 requires a re-**record**, not a re-run, when the primary or the alias target
+changes. To actually perform one:
+
+```
+rm -f evals/runner/src/recordings/*.json && cd evals/runner && pnpm run record
+```
+
+`servedModel` makes a rotation **auditable** (it is in the bytes to be compared) but not
+**self-detecting**. Purging is the operator's step and there is no guard that will do it for you.
