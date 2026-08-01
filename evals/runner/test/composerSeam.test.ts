@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
   composeMessages,
@@ -13,6 +15,11 @@ import { PROMPT_VERSION as agentPromptVersion } from "../src/agent.js";
 import { caseSchema, type EvalCase } from "../src/caseSchema.js";
 import { PROMPT_VERSION as runnerPromptVersion } from "../src/promptVersion.js";
 import { scoreCase } from "../src/score.js";
+
+/** The repo-root prompt file (L5-C5 pins it there). Resolved from this test file, three levels up. */
+function promptPath(): string {
+  return fileURLToPath(new URL(`../../../prompts/${agentPromptVersion}_system.md`, import.meta.url));
+}
 
 /**
  * Guardian condition C2a.iii — the EVAL path drives the production composer.
@@ -92,10 +99,35 @@ describe("the eval runner drives the production message composer (C2a.iii)", () 
     expect(seen.req?.messages).toEqual(composeMessages(SYSTEM_PROMPT, conversation));
   });
 
-  test("at v0-none the driven request carries NO system message", async () => {
+  /**
+   * L5-C2b, the EVAL half. Its twin is in services/agent/test/prompt/systemPrompt.test.ts.
+   *
+   * REPLACES "at v0-none the driven request carries NO system message", which asserted the
+   * promptless baseline and is false by construction now that a prompt exists.
+   *
+   * ANTI-TAUTOLOGY: the expected value is read from `prompts/v1_system.md` ON DISK, never from a
+   * re-imported `SYSTEM_PROMPT`. Comparing the driven request to the constant it was built from
+   * passes even when the load has degraded to empty, because both sides collapse together. That is
+   * the shape of eval-auditor's Blocking B1 from PR A, where the equality assertions were
+   * tautological at `v0-none`. Note the test above deliberately DOES compare against the composer's
+   * output, because its question is "same composer, both paths"; this one's question is "the real
+   * bytes", and only a disk read can answer it.
+   *
+   * This is the assertion that closes hazard H1 for the eval path: without it, 30-odd cases could
+   * replay a promptless path while the scorecard is stamped `v1`.
+   */
+  test("the driven eval request carries the PRODUCTION prompt read from disk (L5-C2b)", async () => {
+    const onDisk = readFileSync(promptPath(), "utf8").trim();
     const seen: { req?: ChatRequest } = {};
+
     await scoreCase(singleTurnCase, { makeRouter: () => capturingRouter(seen) });
-    expect(seen.req?.messages.some((m) => m.role === "system")).toBe(false);
+
+    const system = seen.req?.messages.filter((m) => m.role === "system") ?? [];
+    // Exactly one: a second system message would mean a case smuggled its own in beside production's
+    // (caseSchema forbids the `system` role for precisely this reason).
+    expect(system).toHaveLength(1);
+    expect(system[0].content).toBe(onDisk);
+    expect(system[0].content.length).toBeGreaterThan(0);
   });
 
   test("the runner's PROMPT_VERSION is agent-service's constant, not a copy", () => {

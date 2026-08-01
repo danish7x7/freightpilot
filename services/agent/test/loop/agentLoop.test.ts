@@ -7,6 +7,7 @@ import { searchRatesTool } from "../../src/tools/rates.js";
 import { createBookingTool } from "../../src/tools/booking.js";
 import type { ToolClients } from "../../src/tools/types.js";
 import { runAgentTurn } from "../../src/loop/agentLoop.js";
+import { PROMPT_VERSION } from "../../src/prompt/systemPrompt.js";
 import { useMockHttp } from "../llm/mockHttp.js";
 
 const GEMINI_ORIGIN = "https://generativelanguage.googleapis.com";
@@ -133,5 +134,42 @@ describe("runAgentTurn — extract → validate → retry → form-fallback", ()
     expect(exec.kind).toBe("proposal");
     // Only the Gemini turn was consumed — no booking interceptor existed and none was needed.
     expect(http.agent.pendingInterceptors()).toHaveLength(0);
+  });
+
+  /**
+   * L5-C14 / §6.3.5: every LLM request logs the prompt version that produced it.
+   *
+   * MUTATION: delete `prompt_version: PROMPT_VERSION` from the llm_extract line in agentLoop.ts.
+   *
+   * LOG-ONLY, and that is a deliberate scope boundary rather than an oversight. `prompt_version` is
+   * NOT added to TurnResponse and `contracts/agent.openapi.yaml` is untouched, so there is no wire
+   * contract change in this PR (L5-C14 requires that the log-only choice be stated rather than left
+   * for a reviewer to infer). Persisting it into the `llm_requests` table is the separate D15
+   * telemetry carry named in H6.
+   */
+  test("every llm_extract log line carries the prompt_version that produced the request", async () => {
+    interceptGemini(geminiToolCall("search_rates", VALID));
+    http.agent
+      .get(RATES_ORIGIN)
+      .intercept({ path: "/api/v1/rates/search", method: "GET", query: VALID })
+      .reply(200, { rate_cards: [] });
+
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    await runAgentTurn({ router: buildLlmRouter(ENV), tools: [searchRatesTool], clients: clients(), messages: [...USER], logger });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "llm_extract",
+        prompt_version: PROMPT_VERSION,
+        // servedModel rides the same line (landed at 43c0b31) and was otherwise untested: deleting
+        // it from agentLoop left the suite green. The Gemini wire fixtures predate the field, so it
+        // is undefined here, so asserting the KEY is present is the assertion available, and it dies
+        // if the line stops forwarding it.
+        servedModel: undefined,
+      }),
+    );
+    // Asserting the VALUE, not merely the key: a hardcoded string here would drift from the
+    // constant on the next bump, which is the two-sources-of-truth defect L5-C3 closed.
+    expect(PROMPT_VERSION).toBe("v1");
   });
 });

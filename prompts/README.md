@@ -1,6 +1,11 @@
 # prompts/
 
-Versioned system prompts and tool descriptions for agent-service (`v1_system.md`, `v2_system.md`, …). These land at L5.
+Versioned system prompts for agent-service (`v1_system.md`, `v2_system.md`, …).
+
+`v1_system.md` landed at L5. It is the SOURCE OF TRUTH and is embedded into the service at build
+time by `services/agent/scripts/gen-prompt.ts`, which emits a committed `src/prompt/*.gen.ts`; CI
+regenerates and fails on any drift. Nothing reads this directory at runtime, because it sits
+outside the agent container's docker build context.
 
 **Prompt files are code.** Any change:
 

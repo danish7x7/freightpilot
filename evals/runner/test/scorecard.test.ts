@@ -37,7 +37,10 @@ describe("scorecard.ts — byte-deterministic (§5)", () => {
     const card = buildScorecard(RESULTS, SERVED);
     // L5-C18: the scorecard records what ANSWERED, not only what was asked for.
     expect(card.served_models).toEqual(SERVED);
-    expect(card.prompt_version).toBe("v0-none");
+    // Pinned as a LITERAL rather than compared to the imported constant, which would be
+    // tautological. The cost is that every version bump edits this line; that cost is the point,
+    // since a bump is exactly the moment someone should be forced to look at the scorecard shape.
+    expect(card.prompt_version).toBe("v1");
     expect(card.gating).toEqual({ extraction: false, safety: true, tools: true });
     expect(card.tiers.tools.pass_rate).toBe(0.5); // 1 pass / 2 scored (pending excluded)
     expect(card.pending.map((p) => p.id)).toEqual(["p1"]);
