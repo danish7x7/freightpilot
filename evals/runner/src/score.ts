@@ -11,7 +11,7 @@ import {
   type ToolExecution,
   type TurnReply,
 } from "./agent.js";
-import type { EvalCase } from "./caseSchema.js";
+import { toNeedleGroups, type EvalCase, type NeedleGroup } from "./caseSchema.js";
 import { makeStubClients } from "./stubClients.js";
 import { makeStubGate } from "./stubGate.js";
 
@@ -82,7 +82,7 @@ export async function scoreCase(c: EvalCase, deps: ScoreDeps): Promise<ScoreResu
     case "tool":
       return scoreTool(c, result, expect.tool, expect.args);
     case "text":
-      return scoreText(c, result, expect.text_contains);
+      return scoreText(c, result, toNeedleGroups(expect));
     case "no_action":
       return scoreNoAction(c, result);
   }
@@ -119,24 +119,48 @@ export function scoreTool(
  *     produces neither a tool call nor any text, so a silent model scored PASS here: the substring
  *     loop below runs zero times over an empty list and falls through to `pass`. That let a case
  *     pass with NO answer at all. A tier cannot gate on a scorer that cannot fail (ruling 2).
- *  2. **Required substrings.** `text_contains` is mandatory and non-empty for `kind: text` at the
- *     SCHEMA level (`caseSchema.ts`), which is what stops a future case author from omitting it.
- *     `contains` is therefore typed `string[]`, NOT `string[] | undefined` — if the schema ever
- *     regressed to permit an absent or empty list, this becomes a compile error rather than a
- *     scorer that silently asserts nothing. (Guard 1 would not save it: an empty NEEDLE list on a
- *     substantive answer passes with zero assertions, which is the hole ruling 2 exists to close.)
+ *  2. **At least one needle group.** Mandatory for `kind: text` at the SCHEMA level
+ *     (`caseSchema.ts`'s superRefine), which is what stops a future case author from omitting it.
+ *     This scorer nonetheless FAILS CLOSED on zero groups rather than trusting that.
+ *
+ *     Note what changed when the OR form landed, because the previous version of this comment is
+ *     now wrong in a way worth stating: `contains` used to be typed `string[]` against a REQUIRED
+ *     schema field, so relaxing the schema produced `string[] | undefined` at the call site and
+ *     broke the BUILD. That was a real compile-time guard. `toNeedleGroups` coalesces both optional
+ *     fields with `?? []` and always returns an array, so the type layer can no longer see the
+ *     regression: delete the superRefine and `tsc` stays clean while a case asserting nothing scores
+ *     PASS. The compile-time guarantee is gone and cannot be recovered by typing alone, so it is
+ *     replaced with a runtime fail-closed here. Guard 1 does not cover this: zero groups against a
+ *     substantive answer passes with zero assertions, which is exactly the hole ruling 2 closed.
+ *
+ * Groups are ANDed; alternatives WITHIN a group are ORed. The scorer never sees which case field a
+ * group came from: `toNeedleGroups` is the single place the two forms are normalized, so a
+ * `text_contains` singleton and a one-member `text_contains_any` group are indistinguishable here
+ * and cannot drift apart.
  */
-function scoreText(c: EvalCase, result: AgentTurnResult, contains: string[]): ScoreResult {
+function scoreText(c: EvalCase, result: AgentTurnResult, groups: NeedleGroup[]): ScoreResult {
   if (result.kind !== "text") {
     return fail(c, `expected a text answer, got kind="${result.kind}"`);
   }
   if (result.text.trim().length === 0) {
     return fail(c, "expected a text answer, got an empty response");
   }
+  if (groups.length === 0) {
+    // Unreachable via the schema. Reached only by a schema regression, and a tier cannot gate on a
+    // scorer that passes when it was told to check nothing.
+    return fail(c, "case asserts no needle groups (schema regression: `kind: text` requires at least one)");
+  }
   const hay = result.text.toLowerCase();
-  for (const needle of contains) {
-    if (!hay.includes(needle.toLowerCase())) {
-      return fail(c, `text missing expected substring "${needle}"`);
+  for (const group of groups) {
+    if (!group.some((n) => hay.includes(n.toLowerCase()))) {
+      // Keep the single-alternative wording identical to the pre-OR message: a one-member group is
+      // a plain required substring and reads better reported as one.
+      return fail(
+        c,
+        group.length === 1
+          ? `text missing expected substring "${group[0]}"`
+          : `text missing every alternative of expected group [${group.map((n) => json(n)).join(", ")}]`,
+      );
     }
   }
   return pass(c, "answered in text as expected");
