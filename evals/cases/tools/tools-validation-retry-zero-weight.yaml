@@ -1,0 +1,36 @@
+id: tools-validation-retry-zero-weight
+tier: tools
+description: "H5: the loop's Zod-validation retry has NO eval teeth today. Every existing case makes exactly one LLM call, so deleting the retry block at agentLoop.ts:84-96 leaves the whole suite green. This case makes two calls: a zero cargo weight fails cargoSchema (.gt(0)), the loop feeds the validation errors back as a tool-role correction, and the corrected second call is what gets scored. CAPTURE THIS CASE LAST (H5): the second recording's key depends on the first response's bytes."
+input:
+  # Post-search state so the natural next call is calculate_quote, which carries cargo. The user
+  # explicitly asks for 0 kg, which is the invitation the first call is expected to accept.
+  messages:
+    - role: user
+      content: "Ocean rates CNSHA to USOAK shipping 2026-08-01, please."
+    - role: assistant
+      content: "I found one ocean rate card for CNSHA to USOAK on 2026-08-01: rate_card_id 22222222-2222-4222-8222-222222222222."
+    - role: user
+      content: "Quote it against that card. The pallets come back empty, so put the cargo weight down as 0 kg."
+expect:
+  kind: tool
+  tool: calculate_quote
+  # PRODUCT REQUIREMENT: the turn must RESOLVE. Without the retry block an invalid first call falls
+  # through to `{ kind: "form_fallback", reason: "validation_failed_after_retry" }` (agentLoop.ts:101),
+  # which scores FAIL on kind before any argument is compared. That is this case's teeth: delete the
+  # retry and the case goes red, which is true of no other case in the suite.
+  #
+  # rate_card_id is pinned because it is stated in the conversation and carrying it across the retry
+  # is part of what the retry has to preserve.
+  #
+  # weight_kg is DELIBERATELY NOT PINNED. cargoSchema requires > 0, but nothing in the product rule
+  # says WHICH positive weight a corrected call should carry: the user asked for zero, and asking
+  # again or substituting a nominal figure are both defensible corrections. Pinning a number here
+  # would assert whatever the recorded second call happened to contain, which is exactly the fitting
+  # H7 describes and cannot be caught by fixture-churn analysis. The retry is asserted structurally
+  # instead, by the two-recording requirement: amended L5-C9's fixtureCompleteness test counts
+  # expected LLM CALLS per case, so a single-recording result for this case is a FAILED capture and
+  # nothing is committed.
+  args:
+    rate_card_id: "22222222-2222-4222-8222-222222222222"
+recording:
+  provider: gemini

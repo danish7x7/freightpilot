@@ -1,17 +1,19 @@
 id: extraction-absurd-weight-clarify
 tier: extraction
-description: "An out-of-range weight (well over the 30,000 kg cargo cap) should draw a clarification, not a confident quote. Non-gating baseline — v0-none has no prompt steering this."
+description: "RETIRED. Superseded by extraction-absurd-weight-at-quote, which puts the same 30,000 kg bound at the first tool that actually takes cargo. Kept, not deleted, so the reasoning survives beside the case."
+pending: true
+pending_reason: >-
+  Contested: two defensible behaviors both look correct here, so the case measures nothing and
+  cannot gate. search_rates takes NO cargo argument (searchRatesArgs is origin/dest/mode/ship_date
+  only), so an agent that resolves the lane first and meets the 30,000 kg bound later at
+  calculate_quote is behaving correctly, and an agent that refuses up front is also behaving
+  correctly. Scoring either as a failure asserts a preference rather than a requirement. The
+  tempting fix is adding cargo to search_rates' signature, which would be a contract change made to
+  satisfy an eval and is named as the specific scope-creep risk in hazard H6, so the signature is
+  untouched. Replaced by extraction-absurd-weight-at-quote, which targets calculate_quote where
+  cargoSchema's .max(30000) actually binds, plus extraction-heavy-but-valid-25000kg as the
+  counter-case that stops the prompt passing by clarifying on anything heavy.
 input:
   message: "Quote ocean CNSHA to USOAK on 2026-08-01 for 5,000,000 kg of gravel."
-expect:
-  kind: text
-  # PRODUCT REQUIREMENT (not fitted to recorded output — hazard H7): same rule as the other two
-  # clarify cases — a clarification must NAME the field it cannot proceed without. Here the
-  # unusable field is the cargo weight (5,000,000 kg against a documented 30,000 kg cap), so the
-  # answer must say weight. Deliberately NOT asserting the literal "30,000": the product rule is
-  # that the agent identifies the offending field, and requiring it to recite the bound would be
-  # asserting prompt wording rather than behaviour (PR B states the bound IN the prompt — C12).
-  text_contains:
-    - "weight"
 recording:
   provider: gemini

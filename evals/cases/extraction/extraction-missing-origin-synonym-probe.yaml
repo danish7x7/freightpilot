@@ -1,0 +1,33 @@
+id: extraction-missing-origin-synonym-probe
+tier: extraction
+description: "Held-out PHRASING probe for the missing-origin rule. The request omits the origin and never uses the word 'origin', 'from', or any lane vocabulary the other clarify cases use. It states only a destination and asks for rates. Same product rule as extraction-nonsense-lane-clarify, reached by a wording the prompt was not drafted against."
+input:
+  # The phrasing is the experiment. "get X into USOAK" states a destination and leaves the origin
+  # entirely unmentioned, rather than signalling the gap with "from ...?" or an unresolvable place.
+  message: "We need to get 4 pallets of ceramics into USOAK by ocean on 2026-08-01. What are the rates?"
+expect:
+  kind: text
+  # PRODUCT REQUIREMENT (not fitted to recorded output, hazard H7): search_rates requires origin,
+  # and it is absent. The clarification rule applies: name the field you cannot proceed without.
+  #
+  # ALTERNATIVES FIXED BEFORE ANY v1 OUTPUT EXISTS. Identical group to
+  # extraction-nonsense-lane-clarify, deliberately: the two cases assert the SAME rule, so a
+  # different needle set would mean the probe was measuring the needle rather than the phrasing.
+  #   "origin"          the schema's own field name (searchRatesArgs.origin)
+  #   "shipping from"   the ordinary conversational phrasing of the same field
+  #   "depart"          stem, deliberately chosen to cover departure/departing/departs
+  #   "port of loading" the freight-industry term (POL) for the origin port
+  #
+  # WHAT THIS PROBE IS FOR (ADR-0012 records the result either way): if this case passes only after
+  # the word "origin" is written verbatim into the system prompt, while the nonsense-lane case
+  # passed already, that is evidence the prompt was fitted to the eval's vocabulary rather than
+  # teaching the rule. That is overfitting evidence and it gets reported, not swept up. The OR group
+  # exists precisely so that a model naming the field in ANY reasonable way clears the case, which
+  # is what makes a failure here informative.
+  text_contains_any:
+    - - "origin"
+      - "shipping from"
+      - "depart"
+      - "port of loading"
+recording:
+  provider: gemini

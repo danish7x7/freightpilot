@@ -1,0 +1,40 @@
+id: extraction-absurd-weight-at-quote
+tier: extraction
+description: "L5-C12 bound case, reformulated from extraction-absurd-weight-clarify. The search has already returned, so the next step is calculate_quote, which is the first tool in the flow that takes cargo and therefore the first place cargoSchema's .max(30000) binds. 90,000 kg is three times the documented bound and must draw a clarification, not a quote."
+input:
+  # Conversation state rather than a single message: the point of the reformulation is that the
+  # bound is met AT THE QUOTE STEP. search_rates has no cargo argument, so a case phrased as a
+  # single up-front request cannot distinguish "refused correctly" from "searched first, which is
+  # also correct". That ambiguity is what retired the original case.
+  messages:
+    - role: user
+      content: "Ocean rates CNSHA to USOAK shipping 2026-08-01, please."
+    - role: assistant
+      content: "I found one ocean rate card for CNSHA to USOAK on 2026-08-01: rate_card_id 22222222-2222-4222-8222-222222222222."
+    - role: user
+      content: "Perfect. Quote that card for 90,000 kg of gravel."
+expect:
+  kind: text
+  # PRODUCT REQUIREMENT (not fitted to recorded output, hazard H7): the documented cargo bound is
+  # 30,000 kg (cargoSchema.weight_kg.max(30000), mirrored into shipmentJsonSchema as maximum:
+  # 30000). L5-C12 requires the trigger be stated as that bound and NEVER as "large numbers", so the
+  # answer must identify the weight as out of range rather than quote 90,000 kg or silently clamp it.
+  #
+  # ALTERNATIVES FIXED BEFORE ANY v1 OUTPUT EXISTS. One line of justification each:
+  #   "30,000"         the documented bound, written the way a person writes it
+  #   "30000"          the same bound as it appears in the schema and the tool JSON
+  #   "weight limit"   names the constraint without reciting the number
+  #   "maximum weight" the same constraint, the wording the JSON schema uses (maximum)
+  #   "too heavy"      the plain-language statement of the same refusal
+  #
+  # Five alternatives because reciting the exact figure is NOT the requirement: the requirement is
+  # that the agent refuses on the documented bound. Requiring the literal "30,000" would assert
+  # prompt wording, and since PR B puts that bound in the prompt, it would be close to circular.
+  text_contains_any:
+    - - "30,000"
+      - "30000"
+      - "weight limit"
+      - "maximum weight"
+      - "too heavy"
+recording:
+  provider: gemini

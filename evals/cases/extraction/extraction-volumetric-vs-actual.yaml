@@ -1,0 +1,31 @@
+id: extraction-volumetric-vs-actual
+tier: extraction
+description: "§7 hard class: volumetric versus actual weight. Both figures are forwarded verbatim as cargo fields. The agent must NOT compute volumetric or chargeable weight itself: air pricing uses chargeable weight = max(actual, volumetric) and that arithmetic belongs to rates-service."
+input:
+  messages:
+    - role: user
+      content: "Air rates USORD to DEFRA shipping 2026-09-09, please."
+    - role: assistant
+      content: "I found one air rate card for USORD to DEFRA on 2026-09-09: rate_card_id 33333333-3333-4333-8333-333333333333."
+    - role: user
+      content: "Quote that card. The cargo is 460 kg of medical devices and it measures 3.2 cbm."
+expect:
+  kind: tool
+  tool: calculate_quote
+  # PRODUCT REQUIREMENT: cargoSchema has weight_kg and volume_cbm as separate fields and expects
+  # both to be forwarded as given. rates-service owns rate math (§2.2) and air uses chargeable
+  # weight = max(actual, volumetric), so an agent that derives a volumetric figure and sends it as
+  # weight_kg has both overwritten the user's actual weight and moved pricing arithmetic into the
+  # LLM, which the L2 carry forbids.
+  #
+  # This case is a live trap, not a formality: at a common 1:167 air factor, 3.2 cbm is 534.4 kg,
+  # which exceeds the 460 kg actual. An agent that "helpfully" computes chargeable weight sends 534
+  # and fails on weight_kg. Both values are pinned so either substitution is caught.
+  args:
+    rate_card_id: "33333333-3333-4333-8333-333333333333"
+    shipment:
+      cargo:
+        weight_kg: 460
+        volume_cbm: 3.2
+recording:
+  provider: gemini

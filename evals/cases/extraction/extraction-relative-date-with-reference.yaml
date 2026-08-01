@@ -1,0 +1,27 @@
+id: extraction-relative-date-with-reference
+tier: extraction
+description: "§7 hard class: relative dates. When the USER states a reference date, a relative expression resolves against it and lands as an ISO date. Today = 2026-08-03, so 'two weeks from today' is 2026-08-17."
+input:
+  message: "Today is 2026-08-03. I need ocean rates from CNSHA to USOAK shipping two weeks from today."
+expect:
+  kind: tool
+  tool: search_rates
+  # PRODUCT REQUIREMENT: hard rule 7 requires ISO dates at boundaries, and ship_date is validated by
+  # ISO_DATE (/^\d{4}-\d{2}-\d{2}$/), so any relative expression must be resolved before the call.
+  #
+  # The reference date comes from the USER, per rule R2. The agent has no clock and the prompt
+  # cannot supply one: injecting a live date into the prompt would change the prompt text daily,
+  # which changes `recordingKey` (prompt_version and messages are both hashed), which invalidates
+  # the entire fixture set every 24 hours. So the rule is that relative dates resolve against a
+  # stated reference date, and this case supplies one. Its counterpart,
+  # extraction-relative-date-no-reference, covers the case where none is stated.
+  #
+  # "two weeks from today" is deliberately unambiguous arithmetic. "end of next month" is left to
+  # the no-reference case, where nothing is being pinned and the ambiguity costs nothing.
+  args:
+    origin: "CNSHA"
+    dest: "USOAK"
+    mode: "OCEAN"
+    ship_date: "2026-08-17"
+recording:
+  provider: gemini

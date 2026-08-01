@@ -1,0 +1,23 @@
+id: extraction-multi-leg-red-herring
+tier: extraction
+description: "§7 hard class: multi-leg red herring. The user narrates an inland pre-carriage leg they are handling themselves. FreightPilot quotes the port-to-port ocean leg; the inland leg must not be fabricated into a lane, a second search, or a TRUCK mode."
+input:
+  message: "We'll truck the pallets from our plant in Suzhou over to Shanghai ourselves, then it goes by sea to Oakland. What are the rates for 2026-08-01?"
+expect:
+  kind: tool
+  tool: search_rates
+  # PRODUCT REQUIREMENT: the quotable lane is the one the user is asking FreightPilot to move, which
+  # is Shanghai to Oakland by sea. The Suzhou leg is stated as self-handled and is not a lane the
+  # agent was asked to price.
+  #
+  # The red herring is caught by the pinned args rather than by a separate assertion, and this only
+  # works because runAgentTurn returns the FIRST tool call: an agent that fabricates the inland leg
+  # searches CNSUZ (or similar) or picks mode TRUCK, and either one misses on an arg. Pinning
+  # mode: OCEAN and origin: CNSHA together is what makes "did not invent the truck leg" scoreable.
+  args:
+    origin: "CNSHA"
+    dest: "USOAK"
+    mode: "OCEAN"
+    ship_date: "2026-08-01"
+recording:
+  provider: gemini
