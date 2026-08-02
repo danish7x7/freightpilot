@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   LlmRouter,
   SYSTEM_PROMPT,
@@ -91,7 +91,10 @@ export async function runEvals(opts: RunOptions): Promise<RunResult> {
   // committed directory, not this run's consumption set: see collectServedModels on why those two
   // are equivalent in replay/CI and can diverge during a capture.
   const servedModels = collectServedModels(opts.recordingsDir);
-  const metaPath = opts.recordingsDir + ".meta.json";
+  // join(dirname, basename + ".meta.json") rather than string concatenation: a recordingsDir with
+  // a trailing slash would otherwise put the file INSIDE the scanned directory, where
+  // collectServedModels and the orphan check both walk *.json (security-reviewer, Low).
+  const metaPath = join(dirname(opts.recordingsDir), basename(opts.recordingsDir) + ".meta.json");
   const runDate = opts.date ?? new Date().toISOString().slice(0, 10);
 
   // Record mode STAMPS the capture date; replay only reads it. L5-C18 wants the date the BYTES were

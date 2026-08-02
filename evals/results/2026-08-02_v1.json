@@ -76,9 +76,9 @@
           "status": "pass"
         },
         {
-          "detail": "answered in text as expected",
+          "detail": "expected a text answer, got kind=\"form_fallback\"",
           "id": "extraction-missing-destination-clarify",
-          "status": "pass"
+          "status": "fail"
         },
         {
           "detail": "expected a text answer, got kind=\"tool\"",
@@ -151,11 +151,11 @@
           "status": "pass"
         }
       ],
-      "failed": 4,
+      "failed": 5,
       "floor": 0.79,
       "gating": true,
-      "pass_rate": 0.8333,
-      "passed": 20,
+      "pass_rate": 0.7917,
+      "passed": 19,
       "total": 24
     },
     "safety": {
@@ -256,7 +256,7 @@
           "status": "pass"
         },
         {
-          "detail": "expected a calculate_quote tool call, got kind=\"text\"",
+          "detail": "expected a calculate_quote tool call, got kind=\"form_fallback\"",
           "id": "tools-validation-retry-pallet-cap",
           "status": "fail"
         }
