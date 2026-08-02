@@ -122,4 +122,59 @@ describe("committed recordings' provenance", () => {
         "  forwarding it and the fixture set has lost its provenance.",
     ).toEqual([]);
   });
+
+  /**
+   * ONE served model across the whole set, not merely a served model on each recording.
+   *
+   * The test above checks PRESENCE. Presence alone passes a set stitched together from two
+   * different backing models, which is exactly the shape a multi-day capture produces when the
+   * alias rotates between sessions.
+   *
+   * This is not hypothetical. `gemini-flash-latest` resolved to `gemini-3.6-flash` during the
+   * 2026-08-01 v1 capture, a rotation nothing in this repo requested and no line of it recorded.
+   * That capture then hit a quota wall at 20 of 43 calls, so it is a MULTI-DAY capture by
+   * necessity: the remaining calls will be served by whatever the alias points at whenever the
+   * quota window reopens. If it points somewhere new, the resumed run fills the gaps from a
+   * different backing model and the committed set silently becomes half one model, half another,
+   * while every per-recording assertion in this file still passes.
+   *
+   * That is the mixed-provenance defect L5-C9's all-or-nothing-per-`prompt_version` property
+   * exists to prevent, arriving through a door L5-C9's own wording does not cover: the capture is
+   * complete, every call has a fixture, and the provider is `gemini` throughout. Only the
+   * DISTRIBUTION of served models shows it.
+   *
+   * Same caveat as the test above, and it is the load-bearing one: this makes a rotation
+   * AUDITABLE, not self-detecting. Record mode skips any key that already has a fixture, so
+   * nothing here forces a re-fetch. When this goes red the fix is to `rm -f` the recordings and
+   * capture again from scratch. The purge is the enforcement; this test is only what tells the
+   * operator the purge is owed.
+   *
+   * Uniformity is asserted over recordings that HAVE the field, deliberately. Presence is the
+   * previous test's job, and folding the two together would report one failure for two unrelated
+   * defects. There is no gap between them: a set that lost the field on some slice fails there.
+   */
+  test("the whole fixture set was served by ONE model — a rotation mid-capture is mixed provenance", () => {
+    const byServedModel = new Map<string, string[]>();
+    for (const { file, body } of committedRecordings()) {
+      if (body.eval_provider_error !== undefined) continue;
+      if (typeof body.servedModel !== "string" || body.servedModel.length === 0) continue;
+      const files = byServedModel.get(body.servedModel) ?? [];
+      files.push(file);
+      byServedModel.set(body.servedModel, files);
+    }
+
+    const distinct = [...byServedModel.keys()].sort();
+    const breakdown = distinct
+      .map((m) => `      ${m}: ${byServedModel.get(m)!.length} recording(s), e.g. ${byServedModel.get(m)![0]}`)
+      .join("\n");
+
+    expect(
+      distinct,
+      `the committed set was served by ${distinct.length} different models:\n${breakdown}\n` +
+        "  A capture that spans an alias rotation looks exactly like this, and every other\n" +
+        "  assertion in this file passes on it. The fix is NOT to relax this test: purge the\n" +
+        "  recordings (rm -f) and re-capture in one pass, per L5-C9's all-or-nothing rule.\n" +
+        "  Amendment A5's re-record-not-re-run rule is the same instruction from the other side.",
+    ).toHaveLength(1);
+  });
 });

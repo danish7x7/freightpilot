@@ -434,6 +434,72 @@ Pre-registered before step 3 at **25**. Spent **20**. Closed. Detail in section 
 
 ---
 
+# 2A. Findings from the first (failed) capture attempt, 2026-08-01
+
+The first step 6 attempt captured **20 of 43 expected calls** and aborted on a `rate_limit` from the
+primary. Under amended L5-C9 that is a **failed capture**, so nothing was committed. Two findings
+came out of it that outlive the attempt, and both are recorded here rather than only in the journal
+because each corrects something this project believed.
+
+## 2A.1 The alias rotated, and it rotated during the capture
+
+`gemini-flash-latest` resolved to **`gemini-3.6-flash`** on every one of the 20 recordings. ADR-0007
+pins the live chain to that alias, and nothing in this repository asked for a new backing model or
+recorded that it had changed. This is the **first live demonstration of the thing the `servedModel`
+stamp was added for**: the requested `model` field says `gemini-flash-latest` on all 20 fixtures, so
+before the stamp existed a rotation left literally no trace in the committed bytes.
+
+The consequence for this capture specifically is sharper than a note for posterity. The quota wall
+makes the v1 capture **multi-day by necessity**, so the remaining 23 calls will be served by whatever
+the alias resolves to whenever the window reopens. A second rotation between sessions produces a
+committed set that is part one backing model and part another, with every existing provenance
+assertion still green: the capture is complete, every call has a fixture, the provider is `gemini`
+throughout. Only the distribution of served models shows it.
+
+`evals/runner/test/recordingProvenance.test.ts` now asserts the distinct `servedModel` set across all
+non-error recordings has exactly one member, and names the distinct values with a recording count
+behind each so an operator can see which slice came from which backing model. Verified by mutation:
+editing one fixture's `servedModel` to a different value fails it with the breakdown
+`gemini-3.6-flash: 19, gemini-3.7-flash: 1`, restored clean afterward.
+
+**The field makes a rotation AUDITABLE, not self-detecting, and the distinction is load-bearing.**
+Record mode skips any key that already has a fixture, so an unchanged prompt means an unchanged key
+means a re-record that calls nothing and re-verifies nothing. No test can force a re-fetch. When the
+uniformity assertion goes red, **the enforcement is `rm -f` on the recordings directory followed by a
+single fresh capture**, which is Amendment A5's re-record-not-re-run rule stated from the other side.
+The test is what tells the operator the purge is owed; it is not itself the remedy.
+
+## 2A.2 Correction: a quota wall aborts fail-fast, it does not churn
+
+Before the run, both the implementer and the reviewer stated that a quota wall would be caught
+per-case by `scoreCase` and scored as a failure, letting the run continue through the remaining cases
+and produce a silently partial capture. **That is wrong, and it is recorded because two people
+asserted it independently and neither checked.**
+
+`scoreCase` rethrows anything that is not an `LlmError` (`evals/runner/src/score.ts:73`). The error a
+quota wall produces is `LlmChainExhaustedError`, which extends `Error` and **not** `LlmError`
+(`services/agent/src/llm/errors.ts:44`), because the router raises it after every chain entry has been
+tried (`router.ts:56`). So it propagates out of `runEvals` and the process exits non-zero at the first
+exhausted call.
+
+The behaviour is better than the belief, and it changes the operational picture in two ways worth
+having written down:
+
+- **The partial set is a clean prefix, not a set with scattered holes.** The capture stops at the
+  first wall rather than continuing past it, so what is on disk is exactly the cases the runner
+  reached, in load order.
+- **Resume is cheap and safe.** Record mode returns an existing fixture rather than re-fetching
+  (`replayProvider.ts`), and retryable errors are deliberately never frozen into a recording, so a
+  second pass after the window reopens costs only the calls still missing. The uncommitted partial
+  set is therefore worth keeping between sessions, and deleting it would discard quota already spent.
+
+Note the tension with 2A.1 and resolve it in this order: **resume is safe only while the alias holds
+still.** If the uniformity assertion goes red after a resume, the cheap resume was the wrong move and
+the purge-and-recapture in 2A.1 is owed, at full cost. That is the price of a multi-day capture on a
+rotating alias, and it is the reason L5-C9 wants one pass.
+
+---
+
 # 3. What this ADR still owes
 
 Listed so that the draft cannot be mistaken for the finished decision. Everything here is written
