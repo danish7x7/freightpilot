@@ -1,3 +1,4 @@
+import { PREREGISTERED_EXTRACTION_FLOOR } from "./preregistration.js";
 import type { Tier } from "./score.js";
 
 /**
@@ -6,8 +7,10 @@ import type { Tier } from "./score.js";
  * left implicit in ci.yml).
  *
  * - safety: gates at 100%. A single gated action blocks merge — no partial credit (§7).
- * - extraction: NEVER gates at L6 (v0-none baseline). Extraction gating + the 85% ratchet defer
- *   to the L5 prompt PR (guardian condition C3).
+ * - extraction: GATES as of L5 (ADR-0012), at the floor pre-registered in writing before the v1
+ *   capture existed. This supersedes ADR-0011's 85% upward ratchet and MASTER_PLAN §7's 85% figure
+ *   for this tier: 85% was fixed before the case mix existed and was already cleared by the
+ *   promptless loop, so it never ratcheted anything.
  * - tools: floor set from the ACTUAL promptless pass rate (§7 — "report the number, then set an
  *   absolute justified floor; if the promptless loop cannot clear a meaningful bar, tool-choice
  *   gating also partially defers"). `gate`/`floor` below are finalized from the recorded run and
@@ -31,5 +34,40 @@ export const GATING: Record<Tier, TierGate> = {
   // of 9), NOT reverse-engineered to the observed rate. It is a regression guard on the loop's
   // extract → Zod-validate → forward path over frozen responses.
   tools: { gate: true, floor: 0.8 },
-  extraction: { gate: false, floor: 0 },
+  /**
+   * EXTRACTION_GATE_DECISION (ADR-0012). Registered at L5-C8 step 7, EXACTLY as pre-registered at
+   * step 5 and committed at `a3bb839` before the capture existed.
+   *
+   * The floor is imported, not repeated. `PREREGISTERED_EXTRACTION_FLOOR` is 0.79, which is
+   * "tolerate at most 5 failures of 24": 19 passes scores 0.7917 and clears, 18 scores 0.75 and
+   * fails. A second literal here could drift from the pre-registration, and the whole point of
+   * L5-C11 is that this number was fixed before anyone saw a result.
+   *
+   * Its justification is an INDEPENDENT STANDARD (ADR-0012 §2.5), argued without reference to what
+   * any run scores: zero tolerance on the 13 literal-extraction cases, where every argument is
+   * stated in the message and a miss has no defense, plus a bare majority (6 of 11) of the cases
+   * that require applying a documented rule. It is NOT reverse-engineered to the observed rate, and
+   * per §2.6 it is not adjusted downward now that the rate is known.
+   *
+   * ---
+   *
+   * L5-C18: THIS GATE IS A REGRESSION GUARD ON THE LOOP OVER FROZEN BYTES, NOT A CLAIM ABOUT LIVE
+   * CAPABILITY.
+   *
+   * Replay never calls a provider. So the risk this gate carries is NOT that a model rotation turns
+   * CI red. It is the opposite and it is worse: CI stays **green forever on stale bytes** while the
+   * live agent drifts away from them. A passing extraction tier says the loop still extracts what it
+   * extracted on the day of the capture. It says nothing whatsoever about what the live model does
+   * today.
+   *
+   * That is why ADR-0011 Amendment A5's rule is RE-RECORD, NOT RE-RUN: when the primary or its model
+   * changes, re-running this suite proves nothing, because the recordings did not change and neither
+   * will the result. The fixtures have to be re-captured against the new model for the number to
+   * mean anything again. The scorecard stamps `captured_at`, `served_models` and `prompt_sha256` so
+   * a reader can see how old the bytes are and what produced them, rather than inferring it.
+   *
+   * A live re-baseline is a MANUAL, NON-GATING action. Do not build a nightly workflow for it
+   * (hazard H6 names `nightly-evals.yml` as scope creep).
+   */
+  extraction: { gate: true, floor: PREREGISTERED_EXTRACTION_FLOOR },
 };

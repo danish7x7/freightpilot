@@ -1,7 +1,9 @@
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import {
   LlmRouter,
+  SYSTEM_PROMPT,
   TokenBucket,
   createProvider,
   loadLlmConfig,
@@ -9,6 +11,7 @@ import {
   type LlmRouter as LlmRouterType,
 } from "./agent.js";
 import { loadCases } from "./loadCases.js";
+import { readCaptureMeta, writeCaptureMeta } from "./captureMeta.js";
 import { collectServedModels, ReplayProvider, type ReplayMode } from "./replayProvider.js";
 import { scoreCase, type ScoreDeps, type ScoreResult, type Tier } from "./score.js";
 import { buildScorecard, writeScorecard, type Scorecard } from "./scorecard.js";
@@ -79,13 +82,27 @@ export async function runEvals(opts: RunOptions): Promise<RunResult> {
   // Read AFTER the loop so record mode's stamp includes what it just captured. Note it is the whole
   // committed directory, not this run's consumption set: see collectServedModels on why those two
   // are equivalent in replay/CI and can diverge during a capture.
-  const scorecard = buildScorecard(results, collectServedModels(opts.recordingsDir));
+  const servedModels = collectServedModels(opts.recordingsDir);
+  const metaPath = opts.recordingsDir + ".meta.json";
+  const runDate = opts.date ?? new Date().toISOString().slice(0, 10);
+
+  // Record mode STAMPS the capture date; replay only reads it. L5-C18 wants the date the BYTES were
+  // produced, and only the capture knows that — at replay time "now" is whenever CI ran.
+  if (opts.mode === "record") {
+    writeCaptureMeta(metaPath, {
+      captured_at: runDate,
+      prompt_version: PROMPT_VERSION,
+      prompt_sha256: createHash("sha256").update(SYSTEM_PROMPT ?? "").digest("hex"),
+      served_models: servedModels,
+    });
+  }
+  const scorecard = buildScorecard(results, servedModels, readCaptureMeta(metaPath)?.captured_at ?? null);
   printReport(scorecard, results, opts.mode, gating, log);
 
   let scorecardPath: string | undefined;
   const shouldWrite = opts.writeScorecardFile ?? Boolean(opts.resultsDir);
   if (shouldWrite && opts.resultsDir) {
-    const date = opts.date ?? new Date().toISOString().slice(0, 10);
+    const date = runDate;
     scorecardPath = writeScorecard(opts.resultsDir, scorecard, date);
     log(`\nscorecard → ${scorecardPath}`);
   }

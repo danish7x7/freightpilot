@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
+import { SYSTEM_PROMPT } from "./agent.js";
 import { canonicalJson } from "./recordingKey.js";
 import { GATING } from "./gating.js";
 import { PROMPT_VERSION } from "./promptVersion.js";
@@ -39,6 +41,23 @@ export interface Scorecard {
    * Empty until the v1 capture lands, since no v0-none recording carries the field.
    */
   served_models: string[];
+  /**
+   * Date the capture that produced these fixtures ran (L5-C18), read from the committed capture
+   * metadata. NOT the date this scorecard was generated: replay runs long after the bytes were
+   * recorded, and stamping "now" would answer the wrong question in the most reassuring way.
+   * Null for a fixture set predating the metadata file.
+   */
+  captured_at: string | null;
+  /**
+   * sha256 of the trimmed prompt text this run put on the wire (reviewer addition R1).
+   *
+   * `prompt_version` is a LABEL a human types. This is the bytes. ADR-0011 finding (a) was a label
+   * decoupled from what actually ran, so pairing the two here makes the coupling machine-checked:
+   * `scorecardPromptDigest.test.ts` asserts this equals the digest of the committed
+   * `prompts/v1_system.md` read from disk. A prompt file edited without a version bump changes
+   * this value and fails that test.
+   */
+  prompt_sha256: string;
   gating: Record<Tier, boolean>;
   thresholds: Record<Tier, number | null>;
   tiers: Record<Tier, TierSummary>;
@@ -52,7 +71,11 @@ export interface Scorecard {
  * which is indistinguishable from a capture that genuinely recorded none. Making it required turns
  * that omission into a compile error at every call site.
  */
-export function buildScorecard(results: ScoreResult[], servedModels: string[]): Scorecard {
+export function buildScorecard(
+  results: ScoreResult[],
+  servedModels: string[],
+  capturedAt: string | null,
+): Scorecard {
   const tiers = {} as Record<Tier, TierSummary>;
   for (const tier of TIERS) {
     const inTier = results.filter((r) => r.tier === tier && r.status !== "pending");
@@ -73,6 +96,10 @@ export function buildScorecard(results: ScoreResult[], servedModels: string[]): 
 
   return {
     prompt_version: PROMPT_VERSION,
+    captured_at: capturedAt,
+    // Hashed from the production constant this run actually composed with, not from a file read
+    // here — a digest of something other than what went on the wire would be decorative.
+    prompt_sha256: createHash("sha256").update(SYSTEM_PROMPT ?? "").digest("hex"),
     // Sorted and de-duplicated HERE rather than trusting the caller, so byte-determinism is a
     // property of buildScorecard itself and not of whoever happens to call it.
     served_models: [...new Set(servedModels)].sort(),
