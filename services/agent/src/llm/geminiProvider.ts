@@ -75,6 +75,12 @@ export class GeminiProvider implements LlmProvider {
           id: `call_${i}`,
           name: part.functionCall.name,
           arguments: part.functionCall.args ?? {},
+          // Opaque, and REQUIRED back on the same part when this turn is re-sent (see
+          // NormalizedToolCall.thoughtSignature). It sits on the PART, beside `functionCall`,
+          // not inside it. Dropping it here is invisible until the loop retries, at which point
+          // the next request 400s non-retryably. Spread rather than assigned so a call from a
+          // provider that issues none has no key at all, matching the emit side.
+          ...(part.thoughtSignature !== undefined ? { thoughtSignature: part.thoughtSignature } : {}),
         });
       }
     });
@@ -133,7 +139,14 @@ function toGeminiContent(m: LlmMessage): Record<string, unknown> {
   const parts: unknown[] = [];
   if (m.content) parts.push({ text: m.content });
   for (const tc of m.toolCalls ?? []) {
-    parts.push({ functionCall: { name: tc.name, args: tc.arguments } });
+    // `thoughtSignature` is a sibling of `functionCall` on the part, and is omitted entirely when
+    // the provider issued none (a non-thinking model, or another provider's call round-tripped
+    // here). Sending `thoughtSignature: undefined` would serialize as an absent key anyway, but
+    // building the part conditionally keeps the wire body identical to the pre-thinking-model
+    // shape for providers that do not use it.
+    const part: Record<string, unknown> = { functionCall: { name: tc.name, args: tc.arguments } };
+    if (tc.thoughtSignature !== undefined) part.thoughtSignature = tc.thoughtSignature;
+    parts.push(part);
   }
   return { role: m.role === "assistant" ? "model" : "user", parts };
 }
@@ -142,7 +155,12 @@ function toGeminiContent(m: LlmMessage): Record<string, unknown> {
 interface GeminiResponse {
   candidates?: {
     content?: {
-      parts?: { text?: string; functionCall?: { name: string; args?: Record<string, unknown> } }[];
+      parts?: {
+        text?: string;
+        functionCall?: { name: string; args?: Record<string, unknown> };
+        /** Opaque token on a functionCall part; must be echoed back. See NormalizedToolCall. */
+        thoughtSignature?: string;
+      }[];
     };
   }[];
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };

@@ -42,9 +42,34 @@ export class ReplayMissError extends Error {
  * Record (EVAL_RECORD=1, manual, NEVER in PR CI): delegate to the REAL inner provider (built via
  *   createProvider so recordings reflect real normalization), then persist the NORMALIZED
  *   ChatResponse only. We record at the ChatResponse seam, above the wire — so there is no auth
- *   header, API key, or Gemini `thoughtSignature` to leak (those live below normalization). We
- *   still apply the record-fixtures discipline: write ONLY the known normalized fields, nothing
- *   else, and pin synthesized tool-call ids so re-records don't churn the committed files.
+ *   header or API key to leak (those live below normalization). We still apply the record-fixtures
+ *   discipline: write ONLY the known normalized fields, nothing else, and pin synthesized
+ *   tool-call ids so re-records don't churn the committed files.
+ *
+ * ON `thoughtSignature`, WHICH THIS COMMENT USED TO LIST AS A THING THAT CANNOT LEAK HERE.
+ *
+ * That was true and is no longer. It lived below normalization, so recording above the wire
+ * dropped it for free. As of 2026-08-02 it is a field ON `NormalizedToolCall`, because Gemini
+ * thinking models REQUIRE it echoed back and the loop's retry path 400s without it. So the
+ * question "strip it from recordings, or keep it" became live, and the answer is FORCED rather
+ * than chosen:
+ *
+ *   `recordingKey` hashes `req.messages`. On a retry the loop appends the assistant tool call to
+ *   the conversation, so the signature is INSIDE the material the second call's key is computed
+ *   from. Strip it from the recording and replay rebuilds that assistant turn without it, hashes
+ *   different bytes, and MISSES its own committed fixture. A stripped set could not replay a
+ *   multi-turn tool conversation at all.
+ *
+ * So it is preserved, deliberately, and the DoD is byte-for-byte: the request a replayed retry
+ * builds is identical to the one a live retry builds. Anything less reintroduces the defect this
+ * whole layer exists to prevent, where the eval path and the production path diverge silently.
+ *
+ * It is not a credential. It is opaque model-issued state scoped to one response, it carries no
+ * account authority, and possessing one grants nothing. It stays out of logs (nothing logs
+ * `toolCalls`), and no test asserts its VALUE — only that it round-trips. The residual exposure a
+ * reviewer should weigh is that it is an encoded trace of model reasoning and it lands in a
+ * committed fixture; that is accepted here because these are synthetic freight prompts with no
+ * user or customer data in them.
  */
 export type ReplayMode = "replay" | "record";
 
@@ -130,8 +155,16 @@ export class ReplayProvider implements LlmProvider {
 export function sanitizeResponse(res: ChatResponse): ChatResponse {
   return {
     text: res.text ?? null,
+    // `thoughtSignature` is carried, not stripped: it is part of the key material for the NEXT
+    // call in a retry chain, so a set without it cannot replay one. See the header comment.
+    // Still an allowlist rebuild — the field is named explicitly, nothing is spread in.
     toolCalls: (res.toolCalls ?? []).map(
-      (tc, i): NormalizedToolCall => ({ id: `call_${i}`, name: tc.name, arguments: tc.arguments }),
+      (tc, i): NormalizedToolCall => ({
+        id: `call_${i}`,
+        name: tc.name,
+        arguments: tc.arguments,
+        ...(tc.thoughtSignature !== undefined ? { thoughtSignature: tc.thoughtSignature } : {}),
+      }),
     ),
     usage: { inputTokens: res.usage?.inputTokens ?? 0, outputTokens: res.usage?.outputTokens ?? 0 },
     provider: res.provider,

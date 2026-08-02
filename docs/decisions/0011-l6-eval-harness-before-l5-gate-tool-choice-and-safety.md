@@ -73,3 +73,23 @@ The 4th flip in A3 proves that a meaningful slice of the extraction baseline is 
 
 ---
 *Naming: `NNNN-short-kebab-title.md`, numbered sequentially.*
+
+---
+
+## Amendment B — 2026-08-02: Decision 2's sanitize clause is superseded for `thoughtSignature`
+
+**Status of the decision itself: UNCHANGED.** One clause of one bullet is now stale and is corrected
+here so the governing document does not contradict the code.
+
+Decision 2 above reads that record mode "persists ONLY normalized `ChatResponse` fields — no
+secrets/auth/`thoughtSignature`." The `thoughtSignature` half no longer holds. As of **ADR-0013**
+the eval recorder **preserves** that field, and it is forced rather than chosen: the token is inside
+the key material `recordingKey` computes for the next call in a retry chain, so a stripped fixture
+set cannot replay a multi-turn tool conversation at all.
+
+The secrets/auth half stands unchanged and is unaffected. The recording seam is still above the wire,
+so no auth header or API key can reach a fixture, and security-reviewer re-verified that on
+2026-08-02.
+
+See `docs/decisions/0013-provider-dialect-opaque-token-round-trip.md` for the reasoning, the security
+assessment, and the two residuals accepted.

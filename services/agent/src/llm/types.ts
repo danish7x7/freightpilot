@@ -34,6 +34,31 @@ export interface NormalizedToolCall {
   name: string;
   /** Parsed JSON arguments (OpenAI sends a JSON string; Gemini sends an object — both land here parsed). */
   arguments: Record<string, unknown>;
+  /**
+   * OPAQUE provider token that must be echoed back when this tool call is re-sent.
+   *
+   * Gemini thinking models issue a `thoughtSignature` on the part carrying a `functionCall`, and
+   * REQUIRE it back on that part when the assistant turn is replayed into a later request. Omit it
+   * and the API returns a NON-RETRYABLE 400 ("Function call is missing a thought_signature in
+   * functionCall parts"), which the router surfaces rather than falling back, so the turn dies.
+   * That is every retry the loop makes: `agentLoop` appends the assistant tool call to the
+   * conversation and calls again.
+   *
+   * TREAT AS OPAQUE. Never log it, never branch on its value, never assert what it contains. The
+   * only correctness property is that what came out of a response goes back into the next request
+   * unchanged. Providers that do not issue one leave it undefined, and nothing else in the system
+   * reads it.
+   *
+   * KNOWN LIMITATION, not currently guarded: a signature is only valid for the provider that
+   * issued it, and this type does not record which one that was. `LlmRouter` falls back PER CALL,
+   * not per turn (router.ts), so a turn where Gemini 429s, Groq serves the tool call, and Gemini
+   * serves the retry echoes a `functionCall` part with no signature back to Gemini, producing the
+   * same non-retryable 400 from the opposite direction. Rare (it needs a fallback and a recovery
+   * inside one turn) and out of scope for L5, but it is real and nothing detects it. The fix, when
+   * it is worth making, is to tag the issuing provider here and drop the field when the echo goes
+   * somewhere else. See ADR-0013.
+   */
+  thoughtSignature?: string;
 }
 
 /** Token accounting from the provider's response. */

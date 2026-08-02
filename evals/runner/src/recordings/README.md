@@ -70,3 +70,21 @@ rm -f evals/runner/src/recordings/*.json && cd evals/runner && pnpm run record
 
 `servedModel` makes a rotation **auditable** (it is in the bytes to be compared) but not
 **self-detecting**. Purging is the operator's step and there is no guard that will do it for you.
+
+## `thoughtSignature` in these fixtures (ADR-0013)
+
+Recordings of a tool call served by a Gemini thinking model carry a `thoughtSignature`: an opaque,
+high-entropy base64 token the provider issues and **requires echoed back** when that assistant turn
+is re-sent. It is preserved here deliberately, not by oversight. `recordingKey` hashes
+`req.messages`, and a retry appends the assistant tool call to the conversation, so the signature is
+inside the key material of the next call. A stripped set would replay to a different key and miss its
+own fixture.
+
+Two things follow for anyone touching this directory.
+
+**It is not a credential.** No account authority, scoped to one response, never parsed by this
+codebase. security-reviewer assessed it and returned PASS.
+
+**It will trip generic-secret scanners.** If an allowlist becomes necessary, scope it to the
+`thoughtSignature` **field name**, never to this directory. A directory-wide allowlist is exactly
+what would later hide a real key committed here by accident.
