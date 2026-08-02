@@ -1,17 +1,22 @@
 # evals/runner/src/recordings/ — committed replay fixtures
 
-**These are THROWAWAY `v0-none` recordings.** Do not treat them as durable.
+**These are the committed `v1` fixture set**, captured 2026-08-02 from `gemini-3.1-flash-lite`.
+They are the bytes the extraction, tools and safety gates score against.
 
 Each file is `<sha256>.json`: a normalized `ChatResponse` captured from the real provider chain
 (record mode), keyed by a hash over `{prompt_version, messages, tools}` (see `../recordingKey.ts`).
 CI replays these — **zero API calls** — and a replay **miss is a hard error**, never a live call.
 
-## Why throwaway
+## History: the v0-none set is gone
 
-`prompt_version` is currently `v0-none`: the D14 turn boundary drives the loop with the user
-message + tool schemas alone, **no system prompt** (`turnService.ts:55-57`). When the **L5 prompt
-PR** introduces a system prompt, the `messages` change *and* `PROMPT_VERSION` bumps — so **every key
-here invalidates** and the whole set must be re-captured. Nobody should build on these bytes.
+This directory previously held 30 `v0-none` recordings captured before a system prompt existed.
+L5 introduced one, which changed `messages` and bumped `PROMPT_VERSION`, so every one of those keys
+became unreachable. They were purged in `32e8ff8` rather than left as orphans, because L5-C9 makes
+this directory **all-or-nothing per `prompt_version`** and a directory holding two generations
+cannot satisfy that.
+
+The same rule governs the current set: when the prompt changes again, these all invalidate together
+and are re-captured in one pass. Provenance for the current set is in `../recordings.meta.json`.
 
 ## Re-capturing
 
@@ -37,8 +42,12 @@ reported green. Fix the request instead. `test/recordingProvenance.test.ts` now 
 committed set is anything other than single-provider Gemini.
 
 Record mode wraps the **real** primary provider so recordings reflect real normalization. Only the
-normalized `ChatResponse` fields are persisted (no auth headers, no API keys, no Gemini
-`thoughtSignature` — those live below the normalization seam). Record mode **never runs in PR CI**.
+normalized `ChatResponse` fields are persisted: no auth headers and no API keys, which live below
+the normalization seam. Record mode **never runs in PR CI**.
+
+`thoughtSignature` USED to be listed here as a third thing that could not leak, and as of ADR-0013
+it is deliberately preserved instead. See the section at the end of this file for why that reversal
+is forced rather than chosen.
 
 ### `servedModel`: what answered, versus `model`, what we asked for
 

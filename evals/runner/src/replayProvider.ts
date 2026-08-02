@@ -85,6 +85,19 @@ export class ReplayProvider implements LlmProvider {
   readonly model: string;
   readonly supportsTools = true;
 
+  /**
+   * How many responses this instance actually fetched from the inner provider.
+   *
+   * Record mode short-circuits on an existing fixture, so a re-record over a COMPLETE set makes
+   * zero live calls and refreshes nothing. Callers that stamp capture provenance must be able to
+   * tell that apart from a real capture, or they will write a fresh date over months-old bytes and
+   * the one field meant to expose staleness becomes the thing hiding it.
+   */
+  get liveFetches(): number {
+    return this.fetched;
+  }
+  private fetched = 0;
+
   constructor(private readonly opts: ReplayProviderOptions) {
     this.model = opts.inner?.model ?? "replay";
     if (opts.mode === "record" && !opts.inner) {
@@ -108,6 +121,7 @@ export class ReplayProvider implements LlmProvider {
       }
       try {
         const live = await this.opts.inner!.chat(req);
+        this.fetched++;
         const sanitized = sanitizeResponse(live);
         writeFileSync(file, JSON.stringify(sanitized, null, 2) + "\n");
         return sanitized;

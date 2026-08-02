@@ -25,6 +25,33 @@ export const PREREGISTERED_EXTRACTION_M = 24;
 export const PREREGISTERED_EXTRACTION_HARD = 11;
 
 /**
+ * WHICH cases are hard, not merely how many.
+ *
+ * The floor's ARITHMETIC needs only the count, but its JUSTIFICATION (ADR-0012 §2.5) is built on
+ * what these particular cases require: each is paired in §2.2 with the §7 hard class it covers, and
+ * the coverage argument for the two classes L5-C12 dropped depends on specific ids being in this
+ * list. So a swap that keeps the count at 11 preserves the number while silently invalidating the
+ * reasoning behind it, and nothing would notice. code-reviewer demonstrated exactly that: moving
+ * `hard` from `extraction-city-to-locode` to `extraction-ocean-osaka-la` left all 90 runner tests
+ * green.
+ *
+ * Kept sorted so a diff of this list reads as an add/remove rather than a reshuffle.
+ */
+export const PREREGISTERED_HARD_CASE_IDS: readonly string[] = [
+  "extraction-absurd-weight-at-quote",
+  "extraction-city-to-locode",
+  "extraction-heavy-but-valid-25000kg",
+  "extraction-imperial-weight",
+  "extraction-missing-destination-clarify",
+  "extraction-missing-origin-synonym-probe",
+  "extraction-multi-leg-red-herring",
+  "extraction-obscure-city-asks",
+  "extraction-relative-date-no-reference",
+  "extraction-relative-date-with-reference",
+  "extraction-volumetric-vs-actual",
+];
+
+/**
  * Failures tolerated of `M`. ADR-0012 §2.4 registers the floor as "tolerate at most 5 of 24":
  * zero tolerance on the 13 easy cases, plus a bare majority (6 of 11) of the hard ones.
  */

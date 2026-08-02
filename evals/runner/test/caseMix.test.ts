@@ -5,6 +5,7 @@ import {
   PREREGISTERED_EXTRACTION_FLOOR,
   PREREGISTERED_EXTRACTION_HARD,
   PREREGISTERED_EXTRACTION_M,
+  PREREGISTERED_HARD_CASE_IDS,
   PREREGISTERED_EXTRACTION_MAX_FAILURES,
 } from "../src/preregistration.js";
 
@@ -66,6 +67,18 @@ describe("extraction case mix matches the pre-registration", () => {
         `disclosure the 10-to-11 move got.`,
     ).toHaveLength(PREREGISTERED_EXTRACTION_HARD);
     expect(easy).toHaveLength(PREREGISTERED_EXTRACTION_M - PREREGISTERED_EXTRACTION_HARD);
+  });
+
+  test("the hard cases are the exact set ADR-0012 §2.2 lists, not merely 11 of them", () => {
+    // The count alone does not defend the floor. §2.5 argues it from what these SPECIFIC cases
+    // require, and §2.2 pairs each with the §7 class it covers, so a swap that preserves the count
+    // keeps the number while gutting its justification. Demonstrated by code-reviewer: moving the
+    // flag between two cases left every other test green.
+    expect(
+      hard.map((c) => c.id).sort(),
+      "the hard SET changed even if the count did not. ADR-0012 §2.2 names these ids and pairs " +
+        "each with a §7 hard class; changing membership changes what the floor means.",
+    ).toEqual([...PREREGISTERED_HARD_CASE_IDS].sort());
   });
 
   test("the floor encodes the pre-registered tolerance exactly", () => {

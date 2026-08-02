@@ -57,9 +57,10 @@ test:
 	@echo ">> agent-service (vitest)"
 	cd services/agent && pnpm install --frozen-lockfile && pnpm test
 
-## evals: replay the committed recordings and gate on the tool-choice + safety tiers (L6).
+## evals: replay the committed recordings and gate on ALL THREE tiers.
 ## Zero API calls — a replay miss is a hard error, never a live call. Exits non-zero when a
-## GATING tier is below its floor (safety=100%, tools≥0.8); extraction prints but never gates.
+## GATING tier is below its floor (safety=100%, tools>=0.8, extraction>=0.79). Extraction gates as
+## of L5 (ADR-0012); the floor was pre-registered before the capture existed.
 ## The runner imports agent SOURCE by relative path, so agent-service must be installed first
 ## (its node_modules supply the runner's transitive deps). Record mode is separate + opt-in:
 ##   cd evals/runner && pnpm run record   (manual, needs real keys; captures from the PRIMARY).
