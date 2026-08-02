@@ -168,13 +168,22 @@ describe("committed recordings' provenance", () => {
       .map((m) => `      ${m}: ${byServedModel.get(m)!.length} recording(s), e.g. ${byServedModel.get(m)![0]}`)
       .join("\n");
 
-    expect(
-      distinct,
-      `the committed set was served by ${distinct.length} different models:\n${breakdown}\n` +
-        "  A capture that spans an alias rotation looks exactly like this, and every other\n" +
-        "  assertion in this file passes on it. The fix is NOT to relax this test: purge the\n" +
-        "  recordings (rm -f) and re-capture in one pass, per L5-C9's all-or-nothing rule.\n" +
-        "  Amendment A5's re-record-not-re-run rule is the same instruction from the other side.",
-    ).toHaveLength(1);
+    const message =
+      distinct.length === 0
+        ? "NO recording carries a servedModel, so there is nothing to compare.\n" +
+          "  Before the v1 capture this is EXPECTED and matches the presence test above: the\n" +
+          "  field postdates the v0-none fixtures. After the capture, zero here means the set\n" +
+          "  lost the field wholesale rather than rotating."
+        : `the committed set was served by ${distinct.length} different models:\n${breakdown}\n` +
+          "  A capture that spans an alias rotation looks exactly like this, and every other\n" +
+          "  assertion in this file passes on it. The fix is NOT to relax this test: purge the\n" +
+          "  recordings (rm -f) and re-capture in one pass, per L5-C9's all-or-nothing rule.\n" +
+          "  Amendment A5's re-record-not-re-run rule is the same instruction from the other side.";
+
+    // Strictly 1, so the empty set fails too: "served by one model" is not satisfied by "served by
+    // no identifiable model". Relaxing this to `toBeLessThanOrEqual(1)` would go green today and
+    // stay green forever on a set that had silently lost the field, which is the same defect the
+    // presence test above exists to catch.
+    expect(distinct, message).toHaveLength(1);
   });
 });

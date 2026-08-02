@@ -110,7 +110,7 @@ services:
       # LLM chain for POST /api/v1/turns (L5/D14). If keys are empty the service boots in
       # gate-only mode — the confirmation gate does NOT depend on the LLM. Keys come from .env.
       # Default chain pinned by ADR-0007 (gemini-2.5-flash 404s for new keys; alias instead).
-      LLM_CHAIN: ${LLM_CHAIN:-gemini:gemini-flash-latest,groq:llama-3.3-70b-versatile}
+      LLM_CHAIN: ${LLM_CHAIN:-gemini:gemini-3.1-flash-lite,groq:llama-3.3-70b-versatile}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}

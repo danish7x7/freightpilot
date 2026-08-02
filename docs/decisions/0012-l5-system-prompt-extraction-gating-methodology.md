@@ -469,6 +469,39 @@ uniformity assertion goes red, **the enforcement is `rm -f` on the recordings di
 single fresh capture**, which is Amendment A5's re-record-not-re-run rule stated from the other side.
 The test is what tells the operator the purge is owed; it is not itself the remedy.
 
+### 2A.1a Follow-up, same day: the hazard is removed at the source
+
+The section above is preserved as written, because the reasoning is what justified the test and the
+test is staying. The situation it describes, however, no longer holds.
+
+The primary moved from the `gemini-flash-latest` alias to the **explicit id
+`gemini-3.1-flash-lite`** (ADR-0007 Amendment A, 2026-08-01). The alias resolved into a tier whose
+free-tier ceiling is what stopped the capture at 20 calls; the Lite tier publishes 15 RPM / 500 RPD,
+roughly 11x a full 43-call capture. Both consequences for this ADR:
+
+- **The capture is no longer multi-day.** 2A.1's central worry was that the remaining 23 calls would
+  be served whenever the quota window reopened, by whatever the alias pointed at then. With ~11x
+  headroom the capture is a single pass, and the window between "first call" and "last call" is
+  minutes rather than days.
+- **The uniformity assertion becomes a cheap invariant rather than a live risk.** An explicit id
+  cannot rotate underneath a capture, and both Lite models were verified to echo the requested id as
+  `servedModel`. So the distinct-set-of-one it asserts is now guaranteed by construction rather than
+  by luck of timing. It stays, at near-zero cost, because it is exactly the assertion that would fire
+  if a future session re-pointed the chain mid-capture or reintroduced an alias. A guard whose
+  hazard has been designed out is the cheapest guard there is; deleting it would return the project
+  to the state where the next rotation is invisible.
+
+Cost paid at the switch: the 20 fixtures captured under `gemini-3.6-flash` were **deleted**, since
+`recordingKey` excludes the model and record mode would otherwise have silently reused them,
+building precisely the split set 2A.1 describes. `PROMPT_VERSION` stays `v1` and the step 4 freeze is
+untouched, because the model is not part of the key.
+
+The floor in section 2.4 is unaffected and is **not** re-registered. It was derived as an independent
+standard about what a competent extractor should do (section 2.5), with no reference to any observed
+rate or any particular backing model, so a change of model changes who is being measured rather than
+what competence means. Section 2.6's two permitted responses to a miss stand, and ADR-0007
+Amendment A records explicitly that a model swap is not a third one.
+
 ## 2A.2 Correction: a quota wall aborts fail-fast, it does not churn
 
 Before the run, both the implementer and the reviewer stated that a quota wall would be caught
