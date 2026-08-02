@@ -1,0 +1,53 @@
+id: tools-validation-retry-pallet-cap
+tier: tools
+description: "H5: the loop's Zod-validation retry has NO eval teeth otherwise. Every other case makes exactly one LLM call, so deleting the retry block at agentLoop.ts:84-96 leaves the rest of the suite green. This case makes two calls: an over-cap pallet count fails cargoSchema (.max(100)), the loop feeds the validation errors back as a correction, and the corrected second call is what gets scored. Renamed from tools-validation-retry-zero-weight, whose stimulus could not elicit the path (ADR-0012 §2B.1). CAPTURE LAST (H5): the second recording's key depends on the first response's bytes."
+input:
+  # Post-search state so the natural next call is calculate_quote, the first tool carrying cargo.
+  #
+  # WHY A PALLET COUNT AND NOT A ZERO WEIGHT. The invalid value has to be one the model does not
+  # RECOGNIZE as invalid while producing it. The previous stimulus said "put the cargo weight down
+  # as 0 kg", which names the violation in plain language, and the v1 model answered in text:
+  # "Cargo weight must be greater than 0 kg. Please provide the weight of your cargo in kilograms."
+  # That is correct behavior. It also means the case measured refusal, which four other cases
+  # already cover, rather than the retry it was written for.
+  #
+  # 250 pallets is different in kind. cargoSchema caps pallets at 100 (shipment.ts:14), but the
+  # SYSTEM PROMPT never mentions a pallet cap, so the model has no stated rule to check the request
+  # against. The JSON schema carries `maximum: 100`, and providers do not reliably enforce numeric
+  # bounds in function-call arguments. Everything else here sits inside its documented bound
+  # (24,000 kg < 30,000), so the one cargo rule the prompt DOES teach cannot fire and refuse for the
+  # wrong reason.
+  messages:
+    - role: user
+      content: "Ocean rates CNSHA to USOAK shipping 2026-08-01, please."
+    - role: assistant
+      content: "I found one ocean rate card for CNSHA to USOAK on 2026-08-01: rate_card_id 22222222-2222-4222-8222-222222222222."
+    - role: user
+      content: "Quote it against that card. It's 250 pallets of bottled water, 24,000 kg all in, about 62 cbm."
+expect:
+  kind: tool
+  tool: calculate_quote
+  # PRODUCT REQUIREMENT, UNCHANGED FROM THE PREVIOUS VERSION OF THIS CASE: the turn must RESOLVE.
+  # Without the retry block an invalid first call falls through to
+  # `{ kind: "form_fallback", reason: "validation_failed_after_retry" }` (agentLoop.ts:101), which
+  # scores FAIL on kind before any argument is compared. That is this case's teeth: delete the retry
+  # and the case goes red, which is true of no other case in the suite.
+  #
+  # rate_card_id and weight_kg are pinned because both are stated in the conversation and NEITHER is
+  # what the correction is about. Carrying them unchanged across the retry is part of what the retry
+  # has to preserve: a correction that fixes the pallet count by discarding the rest of the shipment
+  # is not a correct retry.
+  #
+  # `pallets` is DELIBERATELY NOT PINNED. cargoSchema requires 1..100, but nothing in the product
+  # rule says which count a corrected call should carry: splitting the load, asking the user, or
+  # dropping the optional field are all defensible corrections. Pinning a number would assert
+  # whatever the recorded second call happened to contain, which is the fitting hazard H7 describes
+  # and which fixture-churn analysis cannot catch. The retry is asserted STRUCTURALLY instead, by
+  # the two-recording requirement: fixtureCompleteness counts expected LLM CALLS per case.
+  args:
+    rate_card_id: "22222222-2222-4222-8222-222222222222"
+    shipment:
+      cargo:
+        weight_kg: 24000
+recording:
+  provider: gemini
