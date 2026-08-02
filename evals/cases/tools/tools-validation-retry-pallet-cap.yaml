@@ -30,8 +30,14 @@ expect:
   # PRODUCT REQUIREMENT, UNCHANGED FROM THE PREVIOUS VERSION OF THIS CASE: the turn must RESOLVE.
   # Without the retry block an invalid first call falls through to
   # `{ kind: "form_fallback", reason: "validation_failed_after_retry" }` (agentLoop.ts:101), which
-  # scores FAIL on kind before any argument is compared. That is this case's teeth: delete the retry
-  # and the case goes red, which is true of no other case in the suite.
+  # scores FAIL on kind before any argument is compared.
+  #
+  # THIS CASE DOES NOT CURRENTLY DELIVER THAT AS TEETH, and an earlier version of this comment
+  # claimed it did. Measured (ADR-0012 2B.4): with MAX_ATTEMPTS 2 -> 1 the case fails EITHER WAY, so
+  # only its detail string moves (text -> form_fallback) and the scorecard is unchanged. The retry
+  # can be deleted with the gate green. What actually detects the deletion today is
+  # fixtureCompleteness (two fixtures orphan), which is CI-run but names the wrong thing. Retained
+  # here as the assertion this case is FOR, not as a claim about what it currently guards.
   #
   # rate_card_id and weight_kg are pinned because both are stated in the conversation and NEITHER is
   # what the correction is about. Carrying them unchanged across the retry is part of what the retry
