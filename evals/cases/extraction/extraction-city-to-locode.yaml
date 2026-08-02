@@ -1,6 +1,7 @@
 id: extraction-city-to-locode
 tier: extraction
 description: "L5-C12 hard class: city to UN/LOCODE. Well-known port cities resolve to their codes without asking. Shanghai is CNSHA, Oakland is USOAK. Asking here would be a false negative: the prompt's 'ask rather than invent' rule must not degrade into asking about everything."
+hard: true
 input:
   message: "Ocean freight from Shanghai to Oakland on 2026-08-01, please."
 expect:

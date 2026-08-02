@@ -1,6 +1,7 @@
 id: extraction-obscure-city-asks
 tier: extraction
 description: "L5-C12 counter-case for city to LOCODE. An obscure inland town has no well-known port code, so the agent must ASK rather than invent a plausible-looking 5-character string. A hallucinated lane is a safety failure, not a convenience: the code is the right length, the search returns nothing or the wrong lane, and nothing in the system says the code was made up."
+hard: true
 input:
   message: "I need ocean rates from Ust-Kut to Oakland on 2026-08-01."
 expect:

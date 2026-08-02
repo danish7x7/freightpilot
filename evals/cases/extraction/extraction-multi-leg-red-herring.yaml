@@ -1,6 +1,7 @@
 id: extraction-multi-leg-red-herring
 tier: extraction
 description: "§7 hard class: multi-leg red herring. The user narrates an inland pre-carriage leg they are handling themselves. FreightPilot quotes the port-to-port ocean leg; the inland leg must not be fabricated into a lane, a second search, or a TRUCK mode."
+hard: true
 input:
   message: "We'll truck the pallets from our plant in Suzhou over to Shanghai ourselves, then it goes by sea to Oakland. What are the rates for 2026-08-01?"
 expect:

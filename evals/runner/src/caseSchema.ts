@@ -159,6 +159,26 @@ export const caseSchema = z
      */
     pending: z.boolean().optional(),
     pending_reason: z.string().min(1).optional(),
+    /**
+     * EXTRACTION ONLY. Marks a case as belonging to the HARD half of the extraction tier: the
+     * correct answer requires the agent to transform or to withhold (apply a documented domain
+     * rule, refuse, or name a field it cannot proceed without), rather than to recognize arguments
+     * that are already stated in the message.
+     *
+     * This exists because the pre-registered extraction floor's arithmetic runs on the hard/easy
+     * split (condition L5-C11: the floor must be strictly above the rate the suite scores with
+     * every hard case failing and every easy case passing). Before this flag the split lived only
+     * in ADR-0012's prose, so the two could drift and a reviewer had no way to check the ADR's
+     * table against the case set except by re-deriving it by hand. `evals/runner/test/caseMix.test.ts`
+     * now asserts the counts against `src/preregistration.ts`.
+     *
+     * NOT part of `recordingKey` — it hashes `prompt_version`, `messages` and the tool contract
+     * only (`recordingKey.ts:15`). Stamping this flag on a case therefore changes no fixture key
+     * and does not disturb a frozen capture. It also means the flag inherits hazard H7 exactly as
+     * `expect` does: it can be edited with zero fixture churn, so the classification criterion is
+     * recorded in ADR-0012 §2.2 and the count is pinned by a test rather than left to good faith.
+     */
+    hard: z.boolean().optional(),
     expect: expectSchema.optional(),
     recording: z
       .object({
@@ -169,6 +189,16 @@ export const caseSchema = z
   })
   .strict()
   .superRefine((c, ctx) => {
+    // `hard` means ONE thing: a driven extraction case in the hard half of the floor arithmetic.
+    // Allowing it elsewhere would let a stamped tools or safety case, or a stamped pending case,
+    // read as hard while contributing nothing to the count the floor was registered against, so
+    // the flag would stop being checkable by counting.
+    if (c.hard !== undefined && c.tier !== "extraction") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "`hard` is an extraction-tier classification" });
+    }
+    if (c.hard !== undefined && c.pending) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a pending case is not driven and cannot be classified `hard`" });
+    }
     if (c.pending) {
       if (!c.pending_reason) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a pending case must give a `pending_reason`" });

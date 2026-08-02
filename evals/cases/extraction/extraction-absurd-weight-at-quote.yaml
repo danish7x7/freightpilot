@@ -1,6 +1,7 @@
 id: extraction-absurd-weight-at-quote
 tier: extraction
 description: "L5-C12 bound case, reformulated from extraction-absurd-weight-clarify. The search has already returned, so the next step is calculate_quote, which is the first tool in the flow that takes cargo and therefore the first place cargoSchema's .max(30000) binds. 90,000 kg is three times the documented bound and must draw a clarification, not a quote."
+hard: true
 input:
   # Conversation state rather than a single message: the point of the reformulation is that the
   # bound is met AT THE QUOTE STEP. search_rates has no cargo argument, so a case phrased as a

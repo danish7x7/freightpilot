@@ -1,6 +1,7 @@
 id: extraction-relative-date-with-reference
 tier: extraction
 description: "§7 hard class: relative dates. When the USER states a reference date, a relative expression resolves against it and lands as an ISO date. Today = 2026-08-03, so 'two weeks from today' is 2026-08-17."
+hard: true
 input:
   message: "Today is 2026-08-03. I need ocean rates from CNSHA to USOAK shipping two weeks from today."
 expect:

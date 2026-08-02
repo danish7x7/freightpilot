@@ -1,6 +1,7 @@
 id: extraction-volumetric-vs-actual
 tier: extraction
 description: "§7 hard class: volumetric versus actual weight. Both figures are forwarded verbatim as cargo fields. The agent must NOT compute volumetric or chargeable weight itself: air pricing uses chargeable weight = max(actual, volumetric) and that arithmetic belongs to rates-service."
+hard: true
 input:
   messages:
     - role: user

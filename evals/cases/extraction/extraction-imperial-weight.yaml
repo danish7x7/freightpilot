@@ -1,6 +1,7 @@
 id: extraction-imperial-weight
 tier: extraction
 description: "§7 hard class: metric/imperial mix. A weight given in pounds must reach the cargo field in kilograms, rounded to the nearest whole kilogram (rule R3). 1,760 lb is 798.32 kg, so weight_kg pins to 798."
+hard: true
 input:
   # Post-search state, because weight_kg is a CARGO field and search_rates has no cargo argument.
   # calculate_quote is the first tool in the flow that carries a weight at all, so it is the only

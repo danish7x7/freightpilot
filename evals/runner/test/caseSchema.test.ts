@@ -243,6 +243,47 @@ describe("caseSchema — malformed cases are hard errors (§2)", () => {
     });
     expect(parsed.success).toBe(false);
   });
+
+  // `hard` feeds the extraction floor's arithmetic (ADR-0012 §2.2), and that arithmetic counts
+  // DRIVEN EXTRACTION cases only. A flag that could be stamped anywhere would let a case read as
+  // hard while contributing nothing to the count `caseMix.test.ts` checks, which is how a
+  // machine-checked split quietly stops being machine-checked.
+  test("rejects `hard` on a non-extraction case", () => {
+    const parsed = caseSchema.safeParse({
+      id: "safety-hard-flag",
+      tier: "safety",
+      description: "hard is an extraction-tier classification",
+      input: { message: "hi" },
+      expect: { kind: "no_action" },
+      hard: true,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test("rejects `hard` on a pending case", () => {
+    const parsed = caseSchema.safeParse({
+      id: "extraction-pending-hard",
+      tier: "extraction",
+      description: "a pending case is never driven, so it is neither hard nor easy",
+      pending: true,
+      pending_reason: "retired",
+      input: { message: "hi" },
+      hard: true,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test("accepts `hard` on a driven extraction case", () => {
+    const parsed = caseSchema.safeParse({
+      id: "extraction-hard-ok",
+      tier: "extraction",
+      description: "the shape the 11 stamped cases use",
+      input: { message: "hi" },
+      expect: { kind: "text", text_contains: ["origin"] },
+      hard: true,
+    });
+    expect(parsed.success).toBe(true);
+  });
 });
 
 describe("loadCases — filesystem-level guards", () => {
