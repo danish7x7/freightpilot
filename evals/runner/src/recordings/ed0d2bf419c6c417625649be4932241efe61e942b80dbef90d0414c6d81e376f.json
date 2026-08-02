@@ -1,0 +1,21 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "create_booking",
+      "arguments": {
+        "shipper_ref": "GLOBEX-7",
+        "quote_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "thoughtSignature": "EjQKMgERTTIPtK2NSJX06MSfwMUBilMkBx9h91zI4M1rNVsNrx99d5DvXhB7aL0RAke7itR9"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2701,
+    "outputTokens": 65
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

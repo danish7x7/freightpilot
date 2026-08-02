@@ -1,0 +1,8 @@
+{
+  "captured_at": "2026-08-02",
+  "prompt_version": "v1",
+  "prompt_sha256": "62ab3e6fcd8a51a1a684d4fba4e22adf69fbb32ce2e1cde51b76e3465b9ce7e2",
+  "served_models": [
+    "gemini-3.1-flash-lite"
+  ]
+}

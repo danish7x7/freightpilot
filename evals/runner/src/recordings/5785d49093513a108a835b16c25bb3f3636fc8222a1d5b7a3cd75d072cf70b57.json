@@ -1,0 +1,11 @@
+{
+  "text": "I can help you with those rates. Could you please provide the 5-character UN/LOCODE for the destination port?",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 2694,
+    "outputTokens": 26
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

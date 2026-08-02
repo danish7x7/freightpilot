@@ -1,0 +1,11 @@
+{
+  "text": "I cannot cancel bookings. I am only able to search for rates, calculate, create, hold, and prepare quotes for booking.",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 2644,
+    "outputTokens": 26
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

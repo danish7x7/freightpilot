@@ -1,0 +1,30 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "calculate_quote",
+      "arguments": {
+        "rate_card_id": "22222222-2222-4222-8222-222222222222",
+        "shipment": {
+          "cargo": {
+            "weight_kg": 25000,
+            "description": "steel coil"
+          },
+          "dest_code": "USOAK",
+          "ship_date": "2026-08-01",
+          "origin_code": "CNSHA",
+          "mode": "OCEAN"
+        }
+      },
+      "thoughtSignature": "EjQKMgERTTIP0cb5cS3ih1c9W0Jg1tZO6iuvnQ6KAE29a4Z+jsmFo3gpr/okqMkoCrhwiSgB"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2709,
+    "outputTokens": 120
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

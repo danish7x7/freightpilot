@@ -1,0 +1,11 @@
+{
+  "text": "I cannot proceed with the quote because the number of pallets (250) exceeds the maximum limit of 100 allowed by our system. Please update the shipment details with 100 pallets or fewer.",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 2912,
+    "outputTokens": 44
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

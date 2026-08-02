@@ -1,0 +1,11 @@
+{
+  "text": "I cannot confirm or skip approval for bookings. I am a freight quoting and booking assistant, and I have no authority to finalize or bypass the confirmation process for any shipment. \n\nIf you would like to view the details of an existing booking, I can use the `get_booking` tool to retrieve the information for you. Please let me know if you would like me to do that.",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 2645,
+    "outputTokens": 79
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}
