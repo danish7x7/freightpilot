@@ -646,6 +646,53 @@ as it declined on the hold rule. If so, the teeth count stays at 2 and **that is
 finding, not fixed by lowering the threshold from 3.** Section 2.8's pre-registration said so before
 any of this, and it still binds.
 
+## 2B.4 OPEN ITEM: `tools-validation-retry-pallet-cap`'s mechanism works, its assertion is contested
+
+**Recorded after the re-capture. The mechanism succeeded and the case still fails, and those are two
+separate facts.**
+
+**What is settled.** H5's structural requirement is met. The case makes two real LLM calls, both keys
+valid, both serving real responses with no error envelope:
+
+```
+call 1: 82178856…  calculate_quote{ …cargo: { pallets: 250, weight_kg: 24000 } }   <- Zod rejects
+call 2: 7e70e14a…  text: "…250 pallets exceeds the maximum limit of 100…"
+```
+
+The loop's Zod-retry fires, the validation errors are fed back, and a second call is issued. Deleting
+the retry block at `agentLoop.ts:84-96` now breaks a case, which was true of no case in the suite
+before. That is what H5 asked for and it is done. A second two-call chain exists incidentally in
+`extraction-missing-destination-clarify`.
+
+**What is contested.** The case asserts the turn must RESOLVE to a `calculate_quote` call. The model
+instead refused and named the bound it could not satisfy. That is arguably **correct**: 250 pallets
+exceeds a documented limit, correcting it silently would mean inventing a pallet count the user never
+gave, and naming the limit is precisely the behavior the prompt teaches for the 30,000 kg cargo
+bound. So the case now has two defensible behaviors and asserts a preference between them.
+
+**That is the same defect P2 retired `extraction-absurd-weight-clarify` for**, arriving by a different
+route. There the ambiguity was in which tool should meet the bound; here it is whether an
+over-bound request should be corrected or refused. Both make the case measure an author's taste
+rather than a product requirement.
+
+**Why it is NOT being fixed in this PR.** The `expect` block is untouched, deliberately. This case was
+already redesigned once **after** observing a v1 score (§2B.1). Editing its assertion now, after
+observing a second score, is exactly the H7 fitting pattern: `recordingKey` ignores the `expect`
+block, so an expectation edited to match an observed outcome leaves no fixture churn and no forensic
+trace at all. Two post-score adjustments to the same case, the second one to the assertion itself,
+would be indistinguishable from tuning it until it passes. The distinction §2B.0 relies on, that a
+stimulus repair is case authoring while an assertion repair is score fitting, only holds if the
+second one is refused.
+
+**What resolving it requires:** a future PR that **pre-registers the assertion before observing
+anything**, in the shape §2.5 used for the floor. Either the case asserts a resolved tool call and
+the product rule says an over-bound request must be corrected, or it asserts a refusal naming the
+bound, or it is retired to `pending` with the two-defensible-behaviors argument written out as P2
+did. All three are legitimate; picking whichever matches the recording that already exists is not.
+
+**Current cost of leaving it open:** the `tools` tier scores 9/10 = 0.9 against a floor of 0.8, so it
+clears. The failure is a real measurement carried openly, not a green light.
+
 ## 2B.3 What is being re-captured
 
 Only the two changed keys and their chains. Every other fixture is untouched, because
