@@ -1,6 +1,6 @@
 id: tools-validation-retry-pallet-cap
 tier: tools
-description: "H5: the loop's Zod-validation retry has NO eval teeth otherwise. Every other case makes exactly one LLM call, so deleting the retry block at agentLoop.ts:84-96 leaves the rest of the suite green. This case makes two calls: an over-cap pallet count fails cargoSchema (.max(100)), the loop feeds the validation errors back as a correction, and the corrected second call is what gets scored. Renamed from tools-validation-retry-zero-weight, whose stimulus could not elicit the path (ADR-0012 §2B.1). CAPTURE LAST (H5): the second recording's key depends on the first response's bytes."
+description: "H5: the loop's Zod-validation retry has NO eval teeth otherwise. Every other case makes exactly one LLM call, so deleting the retry block at agentLoop.ts:84-96 leaves the rest of the suite green. This case makes two calls: an over-cap pallet count fails cargoSchema (.max(100)), the loop feeds the validation errors back as a correction, and the corrected second call is what gets scored. Renamed from tools-validation-retry-zero-weight — a rename recorded as UNNECESSARY: the old stimulus DID elicit the path and the retry fired, and it died on the thoughtSignature adapter bug fixed at 7d0798b (ADR-0012 §2B.0; the 'could not elicit the path' claim this field used to carry is retracted). CAPTURE LAST (H5): the second recording's key depends on the first response's bytes."
 input:
   # Post-search state so the natural next call is calculate_quote, the first tool carrying cargo.
   #
