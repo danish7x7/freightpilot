@@ -382,6 +382,42 @@ break-the-prompt DoD item stays partially open.
 
 L5-C15(i) and L5-C15(ii) are unaffected by this and are **not deferrable under any circumstance**.
 
+### Status of the two mechanical halves — BOTH DISCHARGED (recorded 2026-08-02)
+
+Recorded here because this is the sentence that asserts they cannot be deferred, and until now nothing
+in this ADR or the journal said whether they had been done. eval-auditor found L5-C15(ii) **neither
+discharged nor recorded as owed** (blocking finding B2). Silence on a non-deferrable condition is the
+same defect this ADR keeps finding in itself: a claim's absence read as a claim's satisfaction.
+
+- **L5-C15(i) — floor to non-zero exit.** `evals/runner/test/gate.test.ts`, CI-run via
+  `.github/workflows/ci.yml`. Was already discharged; was never stated.
+- **L5-C15(ii) — `recordingKey()` differs between the real and a degraded prompt.**
+  `evals/runner/test/recordingKeyPromptDivergence.test.ts`, added 2026-08-02. Hermetic, zero quota.
+  The degraded side is **this section's own pre-registered degradation** — the three domain-rule
+  sections deleted — so this test and the deferred L5-C19 capture describe the same object rather than
+  two different notions of "degraded".
+
+  Anti-tautology, in the shape `scorecardPromptDigest.test.ts` established: the real side is
+  `prompts/v1_system.md` **read from disk**, never `SYSTEM_PROMPT` re-imported. A degraded prompt
+  load leaves a re-imported constant still hashing differently from a degraded literal, so the naive
+  form of this test stays green while production composes promptless requests stamped `v1`. A second
+  test anchors the disk bytes to the production constant, without which the divergence assertion
+  reduces to "sha256 is injective" and says nothing about this repository.
+
+  **Verified by mutation, both forms named in advance:**
+
+  | Mutation to `recordingKey` | Divergence test | Runner suite |
+  |---|---|---|
+  | **A.** drop `messages[0]` (`req.messages.slice(1)`) | **FAILS**, as intended | 4 failures / 3 files |
+  | **B.** drop `prompt_version` from the key material | **passes** | 3 failures / 2 files |
+
+  **Mutation B is reported because it did NOT fail, and that is the honest scope of this test.** It
+  guards the prompt **text**, which rides in `messages[0]`, not the `prompt_version` **label**. Those
+  are two different bindings and only the first is L5-C15(ii)'s subject. The label is guarded
+  elsewhere — `fixtureCompleteness.test.ts` (which fails under B) and L5-C4's filename check — and a
+  reader should not take this test as covering it. Both mutations were reverted and the suite is green
+  at 16 files / 98 tests.
+
 ## 2.8 Safety-tier teeth threshold (P3)
 
 Pre-registered: **at least 3** safety cases must produce `result.kind === "tool"` with
@@ -990,7 +1026,11 @@ after L5-C8 steps 6 and 7, into the body of this file.
   used, and that the successor check is comparing per-case and per-tier result bodies while excluding
   the provenance fields.
 - L5-C19's status: the two pass rates and the degradation diff, or a named open item with the DoD
-  line recorded.
+  line recorded. **The mechanical halves are no longer part of what is owed:** L5-C15(i) and
+  L5-C15(ii) are both DISCHARGED as of 2026-08-02, with artifacts and mutation results in §2.7.
+  L5-C15(ii)'s test did not exist until then, and this list did not say so — an omission, not a
+  deferral, found by eval-auditor as blocking finding B2. What remains owed under this bullet is the
+  L5-C19 degraded **measurement** alone.
 - **eval-auditor's four carried items (2026-08-02):** (a) whether to retire
   `tools-validation-retry-pallet-cap` to `pending` and re-pre-register the retry teeth on a bound
   whose over-run is not a refusable product limit; (b) re-deriving the §2.8 mutation threshold
