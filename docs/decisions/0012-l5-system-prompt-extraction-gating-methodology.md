@@ -1000,7 +1000,10 @@ either way, so its detail string changes (`text` to `form_fallback`) and its sta
 score-level movement comes from `extraction-missing-destination-clarify`, the *incidental* two-call
 chain, and it lands at exactly 0.7917 against a 0.79 floor: one case of headroom, entirely consumed.
 
-So H5's gap is **narrowed, not closed**. What genuinely detects the deletion is
+So H5's gap is **narrowed, not closed**. *(Superseded 2026-08-02 by §2B.5, which replaces "narrowed"
+with a DoD status: ASSERTED at the eval layer via `retryTeeth.test.ts`, still UNGATED. The paragraph
+below also under-counts what already fired — three tests, not one; see §2B.5a.)* What genuinely
+detects the deletion is
 `fixtureCompleteness.test.ts`, which goes red with two orphaned fixtures and is CI-run. That is a real
 guard, but it reports "the recordings directory has no fixture that no case claims", whose obvious
 remedy to a future author is to delete the orphans rather than restore the retry. A mechanism guard
@@ -1048,6 +1051,99 @@ did. All three are legitimate; picking whichever matches the recording that alre
 
 **Current cost of leaving it open:** the `tools` tier scores 9/10 = 0.9 against a floor of 0.8, so it
 clears. The failure is a real measurement carried openly, not a green light.
+
+## 2B.5 H5 status, resolved 2026-08-02: ASSERTED at the eval layer, still UNGATED
+
+§2B.4 above left H5 "narrowed, not closed", which is a description and not a DoD status. This section
+gives it one. **Route (a) was taken — a hermetic assertion was added — and the residual that (a)
+cannot reach is recorded in DoD terms below.**
+
+### 2B.5a Correcting the premise first: the mutation does NOT leave everything green
+
+The standing belief entering this work was that `MAX_ATTEMPTS 2 -> 1` breaks **zero** tests. Measured,
+it breaks **three**, and it always did:
+
+| Test | Layer | What its message says |
+|---|---|---|
+| `services/agent/test/loop/agentLoop.test.ts` — *"invalid args → ONE retry with the errors fed back → valid → executes"* | agent-service | names the retry directly |
+| `fixtureCompleteness.test.ts:153` — *"a case whose retry call has no recording is reported as an INCOMPLETE capture"* | eval runner | points at the FIXTURES |
+| `fixtureCompleteness.test.ts:183` — *"the recordings directory has no fixture that no case claims"* | eval runner | points at the FIXTURES |
+
+So H5's literal sentence — *"deleting the retry block leaves every eval green"* — is **false at the
+test level** and remains **true at the scorecard level**. Both halves matter and the project had been
+carrying only the pessimistic one.
+
+**The real defect was never that nothing fires. It is that two of the three point at the wrong
+thing.** A future author who deletes the retry sees two red tests complaining about stale recordings,
+and the obvious remedy — delete the two orphaned fixtures — makes the suite green **with the retry
+still gone**. The guard's suggested fix completes the regression. That is the hazard, and it is
+sharper than "no teeth".
+
+### 2B.5b What was added, and why it was available under this PR's constraints
+
+`evals/runner/test/retryTeeth.test.ts`. It replays the committed fixtures, counts LLM calls per
+driven case, and asserts the set making more than one call is **exactly**
+`{extraction-missing-destination-clarify, tools-validation-retry-pallet-cap}` — H5's actual subject:
+does the shipped suite still drive a second call.
+
+- **Identity, not count.** A bare "at least one case makes two calls" stays green if the two-call case
+  is swapped for another, which is the substitution H5 is about. `LEARNING.md` (2026-08-02) names
+  this: *"asserting a COUNT where you mean an IDENTITY is the commonest way to build [a blind spot]"*.
+- **It names the mechanism.** Its failure text says the retry is not firing, that `MAX_ATTEMPTS` is
+  the likely cause, and — explicitly — that **the gate will not catch this for you**. It also says
+  "do not re-pin this list", closing the same escape hatch the orphan check leaves open.
+- **It changes nothing any tier measures.** No case added, no `expect` edited, no scorer touched. It
+  sits beside the scorers, never through them. Verified: extraction 20/24, safety 8/8, tools 9/10 —
+  identical before and after. This is the constraint ADR-0012 §2.8a established (changing what a tier
+  measures after seeing a score is unavailable, *even when the direction is stricter*), and route (a)
+  was chosen precisely because it can be done without touching it.
+
+**Mutation results, `MAX_ATTEMPTS 2 -> 1`:**
+
+| | Tests failing | Gate |
+|---|---|---|
+| Before this file | 3 (1 agent-service, 2 runner) | **GREEN** |
+| After this file | **4** (1 agent-service, 3 runner) | **GREEN** |
+
+### 2B.5c What remains OPEN, in DoD terms
+
+**No tier can fail on a deleted retry, and that is by design rather than by oversight.** Deleting it
+flips exactly one scored case — `extraction-missing-destination-clarify`, the incidental chain —
+taking extraction from 20/24 to **19/24 = 0.7917 against a floor of 0.79**. The gate clears by one
+case. `tools-validation-retry-pallet-cap` fails either way (§2B.4), so it contributes no movement.
+
+So the honest status: **the retry is EXERCISED (two committed chains), ASSERTED (four tests, one of
+which names it at the eval layer), and UNGATED (no tier goes red).**
+
+**What would close it, none of which is available in this PR:**
+
+1. A scored case whose failure on retry-deletion crosses a floor — i.e. a *second* deliberate two-call
+   case in the `tools` tier, where the margin is 9/10 against 0.8. Adding a case changes what a tier
+   measures and must be pre-registered before its bytes exist.
+2. Resolving `tools-validation-retry-pallet-cap` (§2B.4's open item) so the deliberate chain scores a
+   real pass/fail rather than failing either way. That is the same pre-registration problem.
+3. Ratcheting the extraction floor so 19/24 no longer clears. Refused on sight: §2.6 permits exactly
+   two responses to a miss and re-registering a floor after seeing a run is the fitting failure
+   L5-C11 exists to prevent — and it would be arriving at it backwards, by tightening after a score.
+
+Until one of those lands, **§7's H5 line is PARTIALLY OPEN**, in the same sense L5-C19 leaves
+break-the-prompt partially open: the mechanism is guarded, the gate is not the guard.
+
+### 2B.5d The pattern, now three instances deep
+
+This is the third hole of identical shape found in this PR, and the repetition is the finding:
+
+| Instance | Path reached | What was watching |
+|---|---|---|
+| L5-C15(ii) | every request carried the prompt into `recordingKey` | nothing checked a degraded prompt re-keyed |
+| ADR-0012 §2.8a | a real booking POST fired through the tool client | `scoreThroughTurn` watched a different client instance |
+| H5 (here) | two committed chains drove the Zod-retry | guards fired, but named the fixtures instead |
+
+**A path being reached is not a guard, and a red test is not a guard either unless its message sends
+the reader to the mechanism.** All three passed casual inspection because something was green that
+looked like coverage. The generalisable rule, added to `LEARNING.md`: when a mechanism is exercised,
+ask separately what fails if it is deleted, and read that failure's TEXT — if it names an artifact
+rather than the mechanism, the guard is pointing at a remedy that hides the defect.
 
 ## 2B.3 What is being re-captured
 
