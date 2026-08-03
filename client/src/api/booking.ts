@@ -2,10 +2,17 @@
 // hits the SAME public booking API the agent will later use). createClient<paths> builds
 // every URL from the generated contract (src/api/booking.gen.ts); baseUrl is the gateway
 // origin ONLY, paths come from the contract — never hand-concatenated.
+// It defaults to "" (SAME-ORIGIN), matching agent.ts and rates.ts: requests go out as relative
+// paths and the Vite dev proxy forwards them to booking-service:8081 (no prod gateway exists in
+// this repo yet; nginx is L7/§9, same caveat as rates.ts) — see
+// ../../proxy.config.ts, which also explains why the /api/v1/quotes prefix needs regex rules
+// (rates owns /api/v1/quotes/calculate; booking owns the rest of that prefix).
+// VITE_BOOKING_URL overrides it for a deployment that fronts the services at a DIFFERENT origin
+// than the client; setting it re-introduces the cross-origin request and its CORS requirements.
 import createClient, { type Middleware } from "openapi-fetch";
 import type { paths } from "./booking.gen";
 
-const baseUrl = import.meta.env.VITE_BOOKING_URL ?? "http://localhost:8081";
+const baseUrl = import.meta.env.VITE_BOOKING_URL ?? "";
 
 // Mint an X-Request-Id per request so the UI's correlation story matches booking-service's
 // onRequest hook (§5: X-Request-Id in, echoed out; validated against /^[A-Za-z0-9._-]{1,64}$/,
