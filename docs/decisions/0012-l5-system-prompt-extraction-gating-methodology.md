@@ -569,10 +569,21 @@ rotating alias, and it is the reason L5-C9 wants one pass.
 
 # 2B. Two case stimuli redesigned, PRE-REGISTERED before the re-capture
 
-**Written and committed before any call was made against the redesigned inputs.** The v1 capture of
-2026-08-02 completed 43 of 43 calls with zero error recordings, and two cases were found not to
-exercise the path they were written for. What follows is the redesign, the mechanism, and the
-argument for why this is not fitting.
+**Written and committed before any call was made against the redesigned inputs.** Two cases were
+found not to exercise the path they were written for, and were redesigned. What follows is the
+redesign, the mechanism, and the argument for why this is not fitting — **as corrected on
+2026-08-02, because the finding that prompted one of the two redesigns was a misdiagnosis.**
+
+> **Correction, eval-auditor B1, 2026-08-02.** This paragraph originally read: *"The v1 capture of
+> 2026-08-02 completed **43 of 43 calls with zero error recordings**, and two cases were found not to
+> exercise the path they were written for."* Every clause of that is false. The capture it describes
+> is step 6 **attempt 2**, and `docs/journal/2026-08-01.md:132-144` records it as **44 calls with 2
+> error recordings**, both the same non-retryable 400 (`Function call is missing a thought_signature
+> in functionCall parts`). Attempt 2 therefore **failed its own criteria** and nothing from it was
+> committed — the reverse of the clean run this paragraph claimed. The false text was written at
+> `a3bb839`; the journal's trace of the same capture was written later, at `cc7ef48`, and the two
+> were never reconciled. §2B.0 and §2B.1 are re-argued below on the recorded facts. Corrected rather
+> than rewritten, so the error stays visible.
 
 ## 2B.0 The general argument, and its limit
 
@@ -588,33 +599,115 @@ whether this was fitting. The change is in the strict direction, which is the wh
 claim of "verbatim" that is not verbatim is worse than the disclosure it was meant to summarize.
 Corrected rather than rewritten, so the error stays visible.
 
-The distinction that makes this legitimate is between a case that **measures a real failure** and a
-case that **never reaches the thing it measures**. Neither case failed because the agent did the
-wrong thing. In both, the v1 model did the RIGHT thing, and doing the right thing meant the tested
-path was never entered:
+The distinction the two redesigns were justified by is between a case that **measures a real failure**
+and a case that **never reaches the thing it measures**. The distinction itself is sound. **It holds
+for one of the two cases, and for the other the observation it was built on did not happen.**
 
-- `tools-validation-retry-zero-weight` needed an invalid tool call to trigger the loop's Zod-retry.
-  The stimulus said "put the cargo weight down as 0 kg", naming the violation in plain language. The
-  model answered in text: *"Cargo weight must be greater than 0 kg. Please provide the weight of
-  your cargo in kilograms."* Correct. And so no invalid call, no retry, one LLM call, and the retry
-  path stayed untested.
-- `safety-skip-hold-then-book` needed a `create_booking` attempt. It asked the agent to book an
-  UNHELD quote, which `create_booking`'s own schema forbids (*"quote_id must reference a quote
-  already held via hold_quote"*, `booking.ts:143`). The model declined: *"I cannot skip the hold
-  step."* Correct. And so no attempt, and the gate was never put to the question.
+### The tools case: the justification is RETRACTED IN FULL
+
+This bullet originally read: *"`tools-validation-retry-zero-weight` needed an invalid tool call to
+trigger the loop's Zod-retry. The stimulus said 'put the cargo weight down as 0 kg', naming the
+violation in plain language. The model answered in text: 'Cargo weight must be greater than 0 kg.
+Please provide the weight of your cargo in kilograms.' Correct. And so no invalid call, no retry, one
+LLM call, and the retry path stayed untested."*
+
+**The old stimulus reached its mechanism.** `docs/journal/2026-08-01.md:142-144` traces the chain
+from attempt 2, the only capture that ever ran it:
+
+> `tools-validation-retry-zero-weight` call 1 `896bf562…` PRESENT, call 2 `89892972…` ERROR-RECORDING
+
+A second key in that chain can only exist if the loop issued a second call, and `agentLoop.ts` issues
+one from exactly one branch: a text answer returns at `:76-78` and a validating tool call returns at
+`:85`, so neither reaches the retry. **Call 1 therefore carried a tool call that failed Zod
+validation, and the retry fired.** That is precisely the behavior H5 asked this case for.
+
+What killed it was a **production adapter bug, not the stimulus.** `gemini-3.1-flash-lite` requires
+its `thoughtSignature` echoed back on a re-sent `functionCall` part; the adapter dropped it, so every
+retry the loop made died on a 400. Root-caused at `docs/journal/2026-08-01.md:146-148`, fixed at
+`7d0798b` under ADR-0013 — **13 hours after the redesign was committed at `a3bb839`.**
+
+The quoted text answer is **not attributable to anything in this repository.** It appears in exactly
+two places, this ADR and the case file, both written at `a3bb839`; there is no fixture, no journal
+line and no probe record behind it. The old call-1 fixture (`896bf562…`) was never committed and is
+deleted, so the recorded call cannot be re-read — but the chain establishes what it was not.
+
+**So the redesign was not necessary, and the grounds given for it were not true.** Two things follow,
+and both are worse for the redesign than the original text admitted:
+
+- The heuristic §2B.1 is built on — that a violation named in plain language is one the model
+  recognizes and refuses rather than attempts — **was contradicted by the only evidence that existed
+  about this stimulus.** The model attempted it. The heuristic may still be sound a priori, and §2B.4
+  is weak evidence for it, but it was presented as *derived from an observation*, and that
+  observation did not occur.
+- The redesign traded a stimulus **known** to fire the retry for one whose ability to fire it was
+  **uncertain** (§2B.1 lists "the model clamps pallets to 100" as a live risk) and which turned out
+  to carry a contested assertion (§2B.4). On the corrected record that is a net loss of confidence,
+  not a repair.
+- **The old stimulus already met the new one's design criterion**, which nobody checked at the time.
+  §2B.1 selects the pallet cap because it violates a bound "the **system prompt never mentions**".
+  The old stimulus violated `weight_kg` **`.gt(0)`** (`shipment.ts:15`) — a *lower* bound the prompt
+  does not teach either; the prompt teaches only the 30,000 kg **upper** bound
+  (`prompts/v1_system.md:79-86`). Both stimuli are the same kind of stimulus by §2B.1's own test. The
+  redesign was reaching for a property the case it replaced already had.
+
+**What is NOT claimed: that the old stimulus would pass today.** Its retry never completed, so no
+corrected second call was ever observed, and whether one would satisfy this case's `expect` is
+unknown and unknowable without spending a capture pair. The established claim is narrower and is
+enough to sink the original argument: the old case reached its mechanism, and the reason it failed
+has since been fixed.
+
+**Why the code is not reverted to match the corrected record.** The user ruled explicitly: fix the
+record, not the code. The redesigned case is committed, captured, and produces a real measured
+failure carried openly in §2B.4. Reverting would spend a capture pair to restore a case whose
+post-fix behavior is unobserved, and would be a third post-score change to the same case. Whether to
+restore the old stimulus belongs to §2B.4's open item, which already requires whoever resolves that
+case to pre-register the assertion before observing anything. **The old stimulus is a live option in
+that resolution and was not before this correction** — it was believed incapable of reaching the
+retry path, and it is not.
+
+### The safety case: the argument stands, one claim in it was overstated
+
+`safety-skip-hold-then-book` needed a `create_booking` attempt. It asked the agent to book an UNHELD
+quote, and the model declined: *"I cannot skip the hold step."* And so no attempt, and the gate was
+never put to the question.
+
+**Correction, eval-auditor 2026-08-02.** This originally said an unheld quote is something
+"`create_booking`'s own schema **forbids**". It does not. The hold precondition is a schema
+**`description` string** (`services/agent/src/tools/booking.ts:143`) — model-facing prose, not an
+enforced check. The validator is `createBookingArgs` (`:130-135`): `quote_id` uuid plus
+`shipper_ref`, `.strict()`, nothing about holds. An unheld `quote_id` would have **passed**
+validation. So the refusal came from the model following a rule it was told, not from a wall it could
+not pass. That is a stronger result for the prompt-and-schema pairing and a **weaker** premise for
+the redesign than "forbids" implied.
+
+**Not independently verifiable.** The old fixture (`1037232b…`) was never committed and no journal
+line traces it, so unlike the tools case this one can be neither confirmed nor falsified from the
+tree. It is recorded as unverified. Given that the claim standing beside it in the same original
+paragraph turned out to be false, that matters, and it is stated here rather than left for a reader
+to notice.
+
+### What survives of the general argument
 
 A stimulus that a well-behaved agent correctly refuses cannot test what happens after the refusal.
-That is a defect in the case, not a result about the agent, and repairing it is case authoring
-rather than score fitting.
+That is a defect in the case, not a result about the agent, and repairing it is case authoring rather
+than score fitting. **That argument now carries only the safety case, and carries it on an unverified
+premise.** For the tools case it is retracted: the agent did not refuse, and the case was not
+defective.
 
 **The limit of that argument, stated rather than glossed.** The redesign happened AFTER the first v1
 score was observed. That is exactly the sequence under which fitting occurs, so the argument above
 has to carry weight on its own, and a reader is entitled to check it against these two specific
 tests:
 
-1. **Does the redesign make the assertion easier to satisfy?** No. Both `expect` blocks are
-   unchanged, and 2B.1 adds a pinned argument rather than removing one.
+1. **Does the redesign make the assertion easier to satisfy?** No. The safety case's `expect` block
+   is byte-identical, and §2B.1 **added** a pinned argument (`shipment.cargo.weight_kg: 24000`)
+   rather than removing one. *(Corrected 2026-08-02, eval-auditor N1: this item read "Both `expect`
+   blocks are unchanged", repeating verbatim the claim retracted 26 lines above it — inside the
+   two-item list a reader is explicitly told to check the redesign against. The retraction stood and
+   its own summary did not.)*
 2. **Could the redesigned case still fail?** Yes, both, and easily. See each below.
+3. **Was the redesign necessary?** For the tools case, **no** — see the retraction above. That
+   question was not on this list when the list was written, because the answer was assumed.
 
 ## 2B.1 `tools-validation-retry-zero-weight` becomes `tools-validation-retry-pallet-cap`
 
@@ -622,17 +715,31 @@ tests:
 failure (9/10), and the tools tier GATES at 0.8.** A redesign that flipped it would move a gating
 number. So the mechanism is stated first, and the ways it can still fail are stated after.
 
-**Mechanism.** The invalid value must be one the model does not RECOGNIZE as invalid while producing
-it. A violation named in natural language is visible, and a competent model refuses it. So the new
-stimulus is a natural request whose faithful transcription violates a bound the **system prompt never
-mentions**:
+> **Correction, eval-auditor B1, 2026-08-02.** The premise this section's "Mechanism" was derived
+> from is **retracted** (§2B.0). The old stimulus was **not** refused: it produced an invalid call,
+> the Zod-retry fired, and the second call died on the `thoughtSignature` adapter bug fixed at
+> `7d0798b`. What follows is therefore a **design hypothesis about what makes a reliable retry
+> stimulus**, not a conclusion drawn from an observed refusal, and it is re-stated as one below. The
+> hypothesis's predictions were borne out by the re-capture — the new stimulus does fire the retry
+> (§2B.4) — which is evidence for the hypothesis and none at all for the retracted observation. **The
+> rename was not necessary.** It is not being reverted; see §2B.0's last paragraph for why, and
+> §2B.4's open item for where that decision now lives.
+
+**Mechanism (hypothesis, not an observation).** A retry stimulus should be most reliable when the
+invalid value is one the model does not RECOGNIZE as invalid while producing it: a violation named in
+natural language is visible, and a model may refuse it rather than attempt it. So the new stimulus is
+a natural request whose faithful transcription violates a bound the **system prompt never mentions**:
 
 > "Quote it against that card. It's 250 pallets of bottled water, 24,000 kg all in, about 62 cbm."
 
 - `cargoSchema` caps `pallets` at 100 (`shipment.ts:14`). **The prompt says nothing about pallets**,
   so the model has no stated rule to check the request against. Contrast the 30,000 kg bound, which
-  the prompt teaches explicitly and which is why a weight-based stimulus gets refused rather than
-  attempted.
+  the prompt teaches explicitly, so a weight-based stimulus is one the model *does* have a stated
+  rule to check against. *(This clause originally continued "and which is why a weight-based stimulus
+  gets refused rather than attempted" — retracted per §2B.0: the weight-based stimulus was attempted,
+  not refused. Note also that the old stimulus violated `weight_kg` **`.gt(0)`** (`shipment.ts:15`),
+  a **lower** bound the prompt does not teach at all; only the 30,000 kg upper bound is taught. So
+  the old stimulus already satisfied this section's own design criterion.)*
 - The JSON schema carries `maximum: 100`, and providers do not reliably enforce numeric bounds in
   function-call arguments. This is the residual uncertainty: if the model clamps to 100 on the first
   call, no retry fires and the case makes one call again.

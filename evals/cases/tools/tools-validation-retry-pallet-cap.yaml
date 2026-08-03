@@ -4,12 +4,24 @@ description: "H5: the loop's Zod-validation retry has NO eval teeth otherwise. E
 input:
   # Post-search state so the natural next call is calculate_quote, the first tool carrying cargo.
   #
-  # WHY A PALLET COUNT AND NOT A ZERO WEIGHT. The invalid value has to be one the model does not
-  # RECOGNIZE as invalid while producing it. The previous stimulus said "put the cargo weight down
-  # as 0 kg", which names the violation in plain language, and the v1 model answered in text:
-  # "Cargo weight must be greater than 0 kg. Please provide the weight of your cargo in kilograms."
-  # That is correct behavior. It also means the case measured refusal, which four other cases
-  # already cover, rather than the retry it was written for.
+  # WHY A PALLET COUNT AND NOT A ZERO WEIGHT. Working HYPOTHESIS: a retry stimulus is most reliable
+  # when the invalid value is one the model does not RECOGNIZE as invalid while producing it, since
+  # a violation named in plain language ("put the cargo weight down as 0 kg") is one a model may
+  # refuse instead of attempting.
+  #
+  # CORRECTED 2026-08-02 (eval-auditor B1) — THIS RENAME WAS NOT NECESSARY. This comment previously
+  # asserted the v1 model DID refuse the old stimulus, quoting a text answer. That is FALSE, and the
+  # quote is unattributable to any fixture, journal line or probe record in this repo. The old
+  # stimulus produced an invalid call and the retry FIRED: docs/journal/2026-08-01.md:142-144 traces
+  # call 1 PRESENT and call 2 as an ERROR RECORDING, and a second call exists only via the retry
+  # branch (agentLoop.ts:76-78 returns on text, :85 on a valid call). What killed it was the Gemini
+  # thoughtSignature adapter bug, fixed at 7d0798b under ADR-0013, 13 hours AFTER this rename landed.
+  # The old stimulus also already met the hypothesis above: weight_kg is `.gt(0)` (shipment.ts:15), a
+  # LOWER bound the prompt never teaches, just as it never teaches the pallet cap.
+  #
+  # The rename is deliberately NOT reverted — the code is committed and captured, and reverting would
+  # spend a capture pair on unobserved behavior. Restoring the old stimulus is now a live option in
+  # ADR-0012 2B.4's open item, which owns this case's resolution. Full record: ADR-0012 2B.0.
   #
   # 250 pallets is different in kind. cargoSchema caps pallets at 100 (shipment.ts:14), but the
   # SYSTEM PROMPT never mentions a pallet cap, so the model has no stated rule to check the request

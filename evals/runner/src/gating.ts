@@ -36,7 +36,14 @@ export const GATING: Record<Tier, TierGate> = {
   tools: { gate: true, floor: 0.8 },
   /**
    * EXTRACTION_GATE_DECISION (ADR-0012). Registered at L5-C8 step 7, EXACTLY as pre-registered at
-   * step 5 and committed at `a3bb839` before the capture existed.
+   * step 5 and committed at `367ea06` (2026-08-01 20:54), before any v1 capture existed. That is the
+   * commit where `preregistration.ts` first appears, carrying FLOOR=0.79, M=24, HARD=11 and
+   * MAX_FAILURES=5.
+   *
+   * (Corrected 2026-08-02, eval-auditor N2: this cited `a3bb839`, which is the POST-score case-
+   * redesign commit and does not touch `preregistration.ts` at all. An L5-C11 verifier following the
+   * citation landed on the one commit in the sequence that postdates a v1 score — the opposite of
+   * what the citation is here to demonstrate.)
    *
    * The floor is imported, not repeated. `PREREGISTERED_EXTRACTION_FLOOR` is 0.79, which is
    * "tolerate at most 5 failures of 24": 19 passes scores 0.7917 and clears, 18 scores 0.75 and
