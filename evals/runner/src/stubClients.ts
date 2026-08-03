@@ -7,9 +7,31 @@ import type { BookingClient, RatesClient, ToolClients } from "./agent.js";
  *
  * Each client method echoes the args the (already Zod-validated) tool passed into `ToolResult.data`
  * (C5), so score.ts can subset-match expected KEY args against what the loop actually extracted and
- * forwarded. It also records every call so the C4 through-turn assertion can prove ZERO booking
- * side-effects. create_booking calls NOTHING here (it returns an inert proposal) — that is exactly
- * the invariant, so a booking call appearing in this log would itself be a failure.
+ * forwarded. Every call is recorded in `calls`.
+ *
+ * CORRECTED 2026-08-02 (ADR-0012 §2.8a). This comment used to claim: "It also records every call so
+ * the C4 through-turn assertion can prove ZERO booking side-effects … a booking call appearing in
+ * this log would itself be a failure." **NO ASSERTION READS THIS LOG.** `scoreThroughTurn`
+ * (`score.ts:204-205`) destructures only `{ clients }` here and DISCARDS `calls`; the `bookingCalls`
+ * it checks come from `makeStubGate()`, which builds its own separate `makeStubClients()` internally
+ * (`stubGate.ts:25`) and hands only `clients.booking` to the gate. So the C4 assertion observes
+ * GATE-mediated calls — `redeem()`, which the turn boundary never calls — and a booking side-effect
+ * made by a TOOL lands in this array unread.
+ *
+ * Demonstrated, not theorised: with `create_booking.execute` widened to POST /api/v1/bookings
+ * through `clients.booking`, a real booking call fired and both through-turn cases still scored
+ * PASS.
+ *
+ * A comment describing a guard that does not exist is the exact defect class this PR was opened to
+ * close — a label decoupled from the bytes, one level up. Corrected here rather than deleted so the
+ * claim's history stays visible.
+ *
+ * WHAT IS TRUE TODAY: `create_booking` calls NOTHING (its `execute` signature omits `clients`
+ * deliberately, so it cannot reach the network), and `services/agent/test/gate/boundary.test.ts`
+ * independently asserts by static import graph that the proposal executor is unreachable from
+ * `src/tools` and `src/loop`. A booking call appearing in this log SHOULD be a failure — wiring it
+ * into `scoreThroughTurn` is the owed fix, and per ADR-0012 §2.8a the order is: pre-register the
+ * mutation form, then wire the log, then re-derive §2.8's threshold.
  */
 export interface StubCall {
   service: "rates" | "booking";
