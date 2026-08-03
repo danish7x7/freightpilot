@@ -1,7 +1,18 @@
 # ADR-0012: L5 system prompt: extraction gating methodology, prompt composition seam, prompt versioning ownership
 
-- **Status:** DRAFT (pre-capture). Committed at L5-C8 **step 5**, before the v1 capture exists.
-- **Date:** 2026-08-01 (draft), to be completed after L5-C8 steps 6 and 7.
+- **Status:** ACCEPTED (post-capture), with named open items in section 3. Was `DRAFT (pre-capture)`
+  until 2026-08-02; the decisions it records — the frozen prompt, the pre-registered floor, and the
+  registered extraction gate — are made and implemented on `feat/l5b-system-prompt`. The status is
+  changed rather than left DRAFT because the file now carries §2A, §2B and §2C post-capture results,
+  which eval-auditor flagged (N12) as contradicting its own header.
+- **Date:** 2026-08-01 (draft: sections 1 and 2 — the freeze and the pre-registration).
+  2026-08-02 (post-capture body: §2A, §2B, §2C, and the corrections marked in place throughout).
+- **Not yet externally gated:** the PR carrying this ADR (L5 PR B) is **unmerged**, its external
+  review returned FAIL with six conditions, and eval-auditor's last verdict was NEEDS WORK with both
+  blockers since addressed and **not re-audited**. "Accepted" describes the decision, not the merge.
+- **Committed at L5-C8 step 5**, as its own commit ahead of the capture commit, so `git log` is the
+  evidence the floor was written while the number did not yet exist. That ordering is a permanent
+  property of this file and is why section 2 is not revisable.
 - **Phase/Layer:** Phase 2 / L5 (system prompt), MASTER_PLAN §6.3, §7, §10.
 - **Deviates from master plan:** yes. It supersedes ADR-0011's 85% upward ratchet and MASTER_PLAN §7's
   85% figure for the extraction tier. That supersession is argued in the post-capture body; the floor
@@ -379,6 +390,12 @@ gitignored scratch directory, and the fixtures are deleted afterward. No degrade
 committed. If quota blocks it, PR B still lands, and this ADR records the measurement as a named open
 item with the trigger "next session with quota headroom" and records explicitly that §7's
 break-the-prompt DoD item stays partially open.
+
+> **Trigger corrected 2026-08-02 (see section 3).** The deferral happened, and the trigger recorded
+> in this paragraph — "next session with quota headroom" — is **not** the one that applies. The
+> primary moved to the explicit `gemini-3.1-flash-lite` id (§2A.1a) and quota is available; the
+> measurement was deferred on TIME grounds. The binding trigger is **the next working session, ahead
+> of new feature work.** The pre-registered subset and degradation form above are unchanged.
 
 L5-C15(i) and L5-C15(ii) are unaffected by this and are **not deferrable under any circumstance**.
 
@@ -1222,6 +1239,13 @@ Recording both halves, because a prediction log that only reports its hits is no
 Listed so that the draft cannot be mistaken for the finished decision. Everything here is written
 after L5-C8 steps 6 and 7, into the body of this file.
 
+**Reading note, added 2026-08-02.** This list mixes two kinds of item: writing this ADR still owes
+into its own body (for example the supersession argument for ADR-0011's 85% ratchet, referenced in
+the header and not yet written anywhere in this file), and live open items carried out of the PR.
+For the ordered, triggered, priority-ranked version a next session can work from, see
+`docs/journal/2026-08-02.md` under "Open / parked". This section is the ADR-local record; the
+journal is the working list.
+
 - The supersession argument in full: why ADR-0011's 85% upward ratchet and MASTER_PLAN §7's 85%
   figure for the extraction tier are replaced, including that 85% was fixed before the case mix
   existed and is already cleared by the promptless loop, so it was never a meaningful ratchet.
@@ -1243,12 +1267,40 @@ after L5-C8 steps 6 and 7, into the body of this file.
 - That L5-C18's capture-date stamp retires the byte-identical-scorecard check (`cmp` exit 0) PR A
   used, and that the successor check is comparing per-case and per-tier result bodies while excluding
   the provenance fields.
-- L5-C19's status: the two pass rates and the degradation diff, or a named open item with the DoD
-  line recorded. **The mechanical halves are no longer part of what is owed:** L5-C15(i) and
-  L5-C15(ii) are both DISCHARGED as of 2026-08-02, with artifacts and mutation results in §2.7.
-  L5-C15(ii)'s test did not exist until then, and this list did not say so — an omission, not a
-  deferral, found by eval-auditor as blocking finding B2. What remains owed under this bullet is the
-  L5-C19 degraded **measurement** alone.
+- **L5-C19(iii) — NOT RUN. Deferred as a NAMED OPEN ITEM under L5-C19(iv), 2026-08-02.**
+
+  **The reason is TIME, not quota, and it is recorded that way deliberately.** L5-C19(iv)'s escape
+  clause is written for a quota wall ("if quota blocks it, PR B still lands"). That escape **does not
+  apply here.** The primary moved to the explicit `gemini-3.1-flash-lite` id (§2A.1a) with roughly 11x
+  the headroom a full capture needs, and the degraded run is 7 cases against a gitignored scratch dir
+  — well inside budget. Quota is available. **The measurement is being deferred because this session
+  spent its remaining time on the external reviewer's six conditions instead**, which is a scheduling
+  choice, not a constraint. Dressing it as a quota deferral would be the cheapest kind of false claim
+  in a document whose subject is false claims, and C19(iv)'s clause would be doing work it was not
+  written for.
+
+  **Trigger:** the next working session, ahead of new feature work. Not "next session with quota
+  headroom" — the headroom is already there.
+
+  **Why deferring it cannot become fitting.** Everything the measurement could be steered by is
+  already frozen in §2.7 and predates every v1 score: the **7-case subset**, all hard, named
+  individually; and the **degradation form**, the three domain-rule sections deleted by name. Neither
+  is revisable, and §1.4's rule applies — a pre-registration already made stays made. So a later
+  session can only run the procedure and report both numbers; it cannot choose the cases after seeing
+  which collapse, which is ruling 1's fitting problem and the thing C19(i) exists to prevent.
+  Deferring costs the DoD line, not the measurement's integrity.
+
+  **What is owed when it runs:** the two pass rates (real vs degraded over the 7), the degradation
+  diff, both written into this ADR's body; scratch fixtures deleted; no degraded recording committed.
+
+- **§7's break-the-prompt DoD item: PARTIALLY OPEN.** Stated in full so "the PR landed" cannot be
+  read as "the DoD closed", which L5-C19(iv) requires explicitly. **Discharged:** L5-C15(i)
+  (`gate.test.ts`, floor → non-zero exit, CI-run) and L5-C15(ii)
+  (`recordingKeyPromptDivergence.test.ts`, real vs degraded prompt re-keys), both mutation-verified,
+  artifacts and results in §2.7. Neither was ever deferrable and neither was deferred. **Open:**
+  L5-C19(iii)'s degraded-tier measurement, above. L5-C15(ii)'s test did not exist until 2026-08-02
+  and this list did not say so — an omission rather than a deferral, found by eval-auditor as
+  blocking finding B2.
 - **eval-auditor's four carried items (2026-08-02):** (a) whether to retire
   `tools-validation-retry-pallet-cap` to `pending` and re-pre-register the retry teeth on a bound
   whose over-run is not a refusable product limit; (b) **RESOLVED 2026-08-02, see §2.8a** — the
