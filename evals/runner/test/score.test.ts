@@ -197,6 +197,98 @@ describe("scoreText — a text case cannot pass on a non-answer", () => {
   });
 });
 
+/**
+ * The scorer-side half of P1: OR groups are ANDed with each other, ORed within themselves. The
+ * schema-side half (empty group, neither field) lives in caseSchema.test.ts.
+ *
+ * These two exist so the OR form cannot collapse into either degenerate reading. Both degenerate
+ * readings pass the happy path, which is why the happy path is not the guard.
+ */
+describe("scoreText: OR groups are ANDed across, ORed within (P1)", () => {
+  const MSG = "I want ocean rates out of CNSHA.";
+
+  function groupsCase(groups: string[][]): EvalCase {
+    return caseSchema.parse({
+      id: "extraction-or-groups",
+      tier: "extraction",
+      description: "d",
+      input: { message: MSG },
+      expect: { kind: "text", text_contains_any: groups },
+    });
+  }
+
+  async function score(text: string, groups: string[][]) {
+    const dir = tempDir("text-or");
+    writeRecording(dir, keyForMessage(MSG), textResponse(text));
+    return scoreCase(groupsCase(groups), replayDeps(dir));
+  }
+
+  // MUTATION: change the scorer to `some` ACROSS groups instead of `every`.
+  // Group 1 is wholly absent and group 2 is satisfied, so an ANDing scorer fails and an ORing one
+  // passes. A single-group case cannot tell the two apart, which is why this case has two groups.
+  test("a group with ALL alternatives absent FAILS, even when another group is satisfied", async () => {
+    const res = await score("What destination port should I quote to?", [
+      ["origin", "shipping from", "departure port"],
+      ["destination"],
+    ]);
+    expect(res.status).toBe("fail");
+    expect(res.detail).toMatch(/missing every alternative/);
+  });
+
+  // MUTATION: change OR WITHIN a group to AND (`some` -> `every` inside the group).
+  // Exactly one alternative is present. Under AND-within, the two absent alternatives fail it.
+  // This is the property the whole change exists for: the case asserts the product rule (the
+  // clarification names the origin field) without pinning the model to one vocabulary choice.
+  test("exactly ONE alternative present satisfies the group and PASSES", async () => {
+    const res = await score("Which port are you shipping from?", [["origin", "shipping from", "departure port"]]);
+    expect(res.status).toBe("pass");
+  });
+
+  test("a group satisfied by its LAST alternative PASSES (no first-element bias)", async () => {
+    const res = await score("Which departure port should I use?", [["origin", "shipping from", "departure port"]]);
+    expect(res.status).toBe("pass");
+  });
+
+  // MUTATION: delete the `groups.length === 0` fail-closed in scoreText.
+  //
+  // Reaching this needs a cast, because the schema makes it unreachable, which is the whole
+  // reason it needs a test. code-reviewer showed the P1 refactor silently retired a REAL
+  // compile-time guard: `contains: string[]` against a required field meant relaxing the schema
+  // broke the build, while `toNeedleGroups`' `?? []` always returns an array, so deleting the
+  // superRefine now leaves tsc clean AND scores a case asserting nothing as PASS. This is the
+  // replacement guarantee, and it is runtime rather than compile-time.
+  test("a case reaching the scorer with ZERO groups FAILS (schema-regression fail-closed)", async () => {
+    const dir = tempDir("text-zero-groups");
+    writeRecording(dir, keyForMessage(MSG), textResponse("What destination port should I quote to?"));
+    const c = {
+      id: "extraction-asserts-nothing",
+      tier: "extraction",
+      description: "bypasses the schema the way a regression would",
+      input: { message: MSG },
+      expect: { kind: "text" },
+    } as unknown as EvalCase;
+    const res = await scoreCase(c, replayDeps(dir));
+    expect(res.status).toBe("fail");
+    expect(res.detail).toMatch(/no needle groups/);
+  });
+
+  test("both needle forms on one case are ANDed together", async () => {
+    const dir = tempDir("text-both-forms");
+    writeRecording(dir, keyForMessage(MSG), textResponse("Which port are you shipping from?"));
+    const c = caseSchema.parse({
+      id: "extraction-both-forms",
+      tier: "extraction",
+      description: "d",
+      input: { message: MSG },
+      // The OR group is satisfied; the plain substring is not. ANDing the two must fail the case.
+      expect: { kind: "text", text_contains: ["destination"], text_contains_any: [["origin", "shipping from"]] },
+    });
+    const res = await scoreCase(c, replayDeps(dir));
+    expect(res.status).toBe("fail");
+    expect(res.detail).toMatch(/missing expected substring "destination"/);
+  });
+});
+
 describe("firstSubsetMiss — subset match on key args", () => {
   test("subset present → no miss; extra actual keys ignored", () => {
     expect(firstSubsetMiss({ a: 1 }, { a: 1, b: 2 })).toBeNull();

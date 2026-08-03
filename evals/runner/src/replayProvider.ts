@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { LlmError, type ChatRequest, type ChatResponse, type LlmErrorKind, type LlmProvider, type NormalizedToolCall } from "./agent.js";
 import { recordingKey } from "./recordingKey.js";
@@ -42,9 +42,34 @@ export class ReplayMissError extends Error {
  * Record (EVAL_RECORD=1, manual, NEVER in PR CI): delegate to the REAL inner provider (built via
  *   createProvider so recordings reflect real normalization), then persist the NORMALIZED
  *   ChatResponse only. We record at the ChatResponse seam, above the wire — so there is no auth
- *   header, API key, or Gemini `thoughtSignature` to leak (those live below normalization). We
- *   still apply the record-fixtures discipline: write ONLY the known normalized fields, nothing
- *   else, and pin synthesized tool-call ids so re-records don't churn the committed files.
+ *   header or API key to leak (those live below normalization). We still apply the record-fixtures
+ *   discipline: write ONLY the known normalized fields, nothing else, and pin synthesized
+ *   tool-call ids so re-records don't churn the committed files.
+ *
+ * ON `thoughtSignature`, WHICH THIS COMMENT USED TO LIST AS A THING THAT CANNOT LEAK HERE.
+ *
+ * That was true and is no longer. It lived below normalization, so recording above the wire
+ * dropped it for free. As of 2026-08-02 it is a field ON `NormalizedToolCall`, because Gemini
+ * thinking models REQUIRE it echoed back and the loop's retry path 400s without it. So the
+ * question "strip it from recordings, or keep it" became live, and the answer is FORCED rather
+ * than chosen:
+ *
+ *   `recordingKey` hashes `req.messages`. On a retry the loop appends the assistant tool call to
+ *   the conversation, so the signature is INSIDE the material the second call's key is computed
+ *   from. Strip it from the recording and replay rebuilds that assistant turn without it, hashes
+ *   different bytes, and MISSES its own committed fixture. A stripped set could not replay a
+ *   multi-turn tool conversation at all.
+ *
+ * So it is preserved, deliberately, and the DoD is byte-for-byte: the request a replayed retry
+ * builds is identical to the one a live retry builds. Anything less reintroduces the defect this
+ * whole layer exists to prevent, where the eval path and the production path diverge silently.
+ *
+ * It is not a credential. It is opaque model-issued state scoped to one response, it carries no
+ * account authority, and possessing one grants nothing. It stays out of logs (nothing logs
+ * `toolCalls`), and no test asserts its VALUE — only that it round-trips. The residual exposure a
+ * reviewer should weigh is that it is an encoded trace of model reasoning and it lands in a
+ * committed fixture; that is accepted here because these are synthetic freight prompts with no
+ * user or customer data in them.
  */
 export type ReplayMode = "replay" | "record";
 
@@ -59,6 +84,19 @@ export class ReplayProvider implements LlmProvider {
   readonly name = "replay";
   readonly model: string;
   readonly supportsTools = true;
+
+  /**
+   * How many responses this instance actually fetched from the inner provider.
+   *
+   * Record mode short-circuits on an existing fixture, so a re-record over a COMPLETE set makes
+   * zero live calls and refreshes nothing. Callers that stamp capture provenance must be able to
+   * tell that apart from a real capture, or they will write a fresh date over months-old bytes and
+   * the one field meant to expose staleness becomes the thing hiding it.
+   */
+  get liveFetches(): number {
+    return this.fetched;
+  }
+  private fetched = 0;
 
   constructor(private readonly opts: ReplayProviderOptions) {
     this.model = opts.inner?.model ?? "replay";
@@ -83,6 +121,7 @@ export class ReplayProvider implements LlmProvider {
       }
       try {
         const live = await this.opts.inner!.chat(req);
+        this.fetched++;
         const sanitized = sanitizeResponse(live);
         writeFileSync(file, JSON.stringify(sanitized, null, 2) + "\n");
         return sanitized;
@@ -120,17 +159,68 @@ export class ReplayProvider implements LlmProvider {
  * scripts/record-fixtures.ts). Tool-call ids are synthesized by the adapter (Gemini sends none),
  * so we PIN them to `call_<i>` — they carry no meaning downstream (the loop only echoes them) and
  * pinning keeps committed recordings byte-stable across re-records.
+ *
+ * THIS IS AN ALLOWLIST, and that is the hazard: a field the adapter parses but this function does
+ * not name is silently dropped at record time. It would look captured in the type and be absent
+ * from every committed byte, which is the same class of defect as a label decoupled from what it
+ * labels. `servedModel` is forwarded here for that reason, and a mutation test drops this line
+ * specifically to prove the omission is loud rather than invisible.
  */
 export function sanitizeResponse(res: ChatResponse): ChatResponse {
   return {
     text: res.text ?? null,
+    // `thoughtSignature` is carried, not stripped: it is part of the key material for the NEXT
+    // call in a retry chain, so a set without it cannot replay one. See the header comment.
+    // Still an allowlist rebuild — the field is named explicitly, nothing is spread in.
     toolCalls: (res.toolCalls ?? []).map(
-      (tc, i): NormalizedToolCall => ({ id: `call_${i}`, name: tc.name, arguments: tc.arguments }),
+      (tc, i): NormalizedToolCall => ({
+        id: `call_${i}`,
+        name: tc.name,
+        arguments: tc.arguments,
+        ...(tc.thoughtSignature !== undefined ? { thoughtSignature: tc.thoughtSignature } : {}),
+      }),
     ),
     usage: { inputTokens: res.usage?.inputTokens ?? 0, outputTokens: res.usage?.outputTokens ?? 0 },
     provider: res.provider,
     model: res.model,
+    servedModel: res.servedModel,
   };
+}
+
+/**
+ * The DISTINCT served models across the committed recordings, sorted.
+ *
+ * A set rather than a scalar, deliberately. The v1 capture is budgeted to span more than one day
+ * against a daily-capped free tier, so the alias can rotate PART WAY THROUGH it. A single string
+ * would have to pick a winner and would therefore be false for some of the fixtures it claims to
+ * describe, hiding the exact event this field exists to surface. A set of two is a loud, readable
+ * signal that the capture is not homogeneous.
+ *
+ * Reads the WHOLE DIRECTORY rather than tracking which fixtures a given run consumed. In
+ * replay/CI that is sound and equivalent: `fixtureCompleteness`'s orphan test forbids a fixture no
+ * case claims, and it runs in the same CI job as `make evals`, so a divergent directory cannot
+ * merge green. In RECORD mode nothing enforces it, and there the difference is live: a stale
+ * orphan from a superseded key contributes to the union indistinguishably from a genuine
+ * mid-capture rotation. Both show up as a two-element set, which is the signal this function
+ * exists to make loud, so the operator meets the false positive during capture and before the
+ * orphan test can speak. A two-element set during a capture means "look at the directory", not
+ * "the alias rotated".
+ *
+ * Error envelopes are skipped explicitly. This is DEFENCE IN DEPTH rather than a load-bearing
+ * branch: they persist {kind, provider, status, message} and never carried a model, so the
+ * non-empty-string guard below would exclude them anyway. Deleting this line breaks no test.
+ */
+export function collectServedModels(recordingsDir: string): string[] {
+  if (!existsSync(recordingsDir)) return [];
+  const seen = new Set<string>();
+  for (const file of readdirSync(recordingsDir)) {
+    if (!file.endsWith(".json")) continue;
+    const body: unknown = JSON.parse(readFileSync(join(recordingsDir, file), "utf8"));
+    if (isErrorRecording(body)) continue;
+    const served = (body as ChatResponse).servedModel;
+    if (typeof served === "string" && served.length > 0) seen.add(served);
+  }
+  return [...seen].sort();
 }
 
 function describeRequest(req: ChatRequest): string {

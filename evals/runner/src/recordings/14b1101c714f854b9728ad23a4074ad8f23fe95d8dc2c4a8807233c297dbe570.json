@@ -1,0 +1,31 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "calculate_quote",
+      "arguments": {
+        "shipment": {
+          "dest_code": "DEFRA",
+          "mode": "AIR",
+          "cargo": {
+            "volume_cbm": 3.2,
+            "weight_kg": 460,
+            "description": "medical devices"
+          },
+          "origin_code": "USORD",
+          "ship_date": "2026-09-09"
+        },
+        "rate_card_id": "33333333-3333-4333-8333-333333333333"
+      },
+      "thoughtSignature": "EjQKMgERTTIPY2FxDu/GlKEo5LsoGOwKU61OxSkABclC2umwpMgV2HxNovfEm1GrlWzJe7Dn"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2716,
+    "outputTokens": 125
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

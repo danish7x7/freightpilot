@@ -17,8 +17,16 @@
  * Success bodies are SANITIZED before writing (sanitizeBody): we keep only the fields
  * the adapter's normalizer actually reads and drop everything else. This matters for
  * more than tidiness — Gemini thinking models return an encrypted `thoughtSignature`
- * reasoning blob the adapter never consumes, and its base64 content trips secret
- * scanners as a false positive. Stripping it keeps committed fixtures minimal + clean.
+ * reasoning blob whose base64 content trips secret scanners as a false positive.
+ * Stripping it keeps committed fixtures minimal + clean.
+ *
+ * "the adapter never consumes it" USED to be the justification here and is no longer true:
+ * as of ADR-0013 the adapter round-trips `thoughtSignature`, because Gemini requires it echoed
+ * back on a re-sent `functionCall` part. Stripping is still correct FOR THESE fixtures, on a
+ * narrower ground: these are SINGLE-CALL wire fixtures, so no echo ever happens and the field
+ * genuinely is unused here. The eval recorder is the opposite case and deliberately PRESERVES it
+ * (evals/runner/src/replayProvider.ts), because there the signature is inside the key material of
+ * the next call in a retry chain. Two recorders, opposite rules, one reason each.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

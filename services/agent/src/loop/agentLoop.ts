@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { LlmMessage } from "../llm/index.js";
 import type { LlmRouter } from "../llm/index.js";
 import type { Tool, ToolClients, ToolExecution } from "../tools/index.js";
+import { PROMPT_VERSION } from "../prompt/systemPrompt.js";
 
 /**
  * The agent tool loop (§6.2 / §6.3.1): extract → Zod-validate → ONE retry with the errors
@@ -56,8 +57,17 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     logger.info({
       event: "llm_extract",
       attempt,
+      // §6.3.5 / condition L5-C14: which prompt produced this request. LOG-ONLY, deliberately.
+      // `prompt_version` is NOT added to TurnResponse and contracts/agent.openapi.yaml is
+      // unchanged; see the log-only note on systemPrompt.ts's PROMPT_VERSION. ADR-0012 (Part 9, not
+      // yet written) owes this the same note in prose.
+      // Persisting it into the `llm_requests` table is a separate D15 telemetry carry (H6): a log
+      // field is in scope for this PR, a database column is not.
+      prompt_version: PROMPT_VERSION,
       provider: res.provider,
       model: res.model,
+      // What ANSWERED, when the provider says. `model` is the configured alias.
+      servedModel: res.servedModel,
       usage: res.usage,
       latencyMs: Date.now() - t0,
     });

@@ -54,10 +54,10 @@ export async function runTurn(deps: TurnDeps, input: TurnInput): Promise<TurnRep
   const conversationId = input.conversationId ?? randomUUID();
   const logger = deps.logger ?? noopLogger;
 
-  // Messages come from the SHARED composer (condition C1) — the same function the eval runner
-  // drives, so the suite can never measure a different message list than production sends. At
-  // v0-none SYSTEM_PROMPT is undefined and this is exactly [{role:"user"}], the promptless
-  // baseline; PR B lands the prompt and both paths pick it up together.
+  // Messages come from the SHARED composer (condition L5-C1), the same function the eval runner
+  // drives, so the suite can never measure a different message list than production sends. At v1
+  // this is [{role:"system", content: the prompt}, {role:"user", ...}]; the eval path builds the
+  // identical shape from the identical constant, which is what closes hazard H1.
   const messages: LlmMessage[] = composeMessages(SYSTEM_PROMPT, [
     { role: "user", content: input.message },
   ]);

@@ -1,0 +1,30 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "calculate_quote",
+      "arguments": {
+        "rate_card_id": "22222222-2222-4222-8222-222222222222",
+        "shipment": {
+          "origin_code": "CNSHA",
+          "dest_code": "USOAK",
+          "ship_date": "2026-08-01",
+          "cargo": {
+            "weight_kg": 1200,
+            "description": "auto parts"
+          },
+          "mode": "OCEAN"
+        }
+      },
+      "thoughtSignature": "EjQKMgERTTIPyHdB6rVq7s3WbkmNJscCdqlqRcUv6B0T51QvcrQNLbsvrP8sNqg5zl0RDr3L"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2716,
+    "outputTokens": 119
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

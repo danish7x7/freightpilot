@@ -1,10 +1,28 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test, vi } from "vitest";
-import { composeMessages, PROMPT_VERSION, SYSTEM_PROMPT } from "../../src/prompt/systemPrompt.js";
+import {
+  composeMessages,
+  PROMPT_BYTES,
+  PROMPT_SHA256,
+  PROMPT_SOURCE,
+  PROMPT_VERSION,
+  SYSTEM_PROMPT,
+} from "../../src/prompt/systemPrompt.js";
 import { runTurn, type TurnDeps } from "../../src/turn/turnService.js";
 import type { LlmMessage, LlmRouter } from "../../src/llm/index.js";
 import type { RunAgentTurnArgs } from "../../src/loop/agentLoop.js";
 import type { GateDeps } from "../../src/gate/gateService.js";
 import type { ToolClients } from "../../src/tools/index.js";
+
+/**
+ * The repo-root prompt file (condition L5-C5 pins it there by absolute path; there is deliberately
+ * no `services/agent/prompts/`). Resolved from this test file, four levels up.
+ */
+function promptPath(): string {
+  return fileURLToPath(new URL(`../../../../prompts/${PROMPT_SOURCE}`, import.meta.url));
+}
 
 /**
  * Guardian condition C2a — the composer, and the production path's use of it.
@@ -58,11 +76,38 @@ describe("composeMessages (C2a.i)", () => {
     expect(conversation).toHaveLength(1);
   });
 
-  test("SYSTEM_PROMPT is absent at v0-none, and PROMPT_VERSION says so", () => {
-    // These two must move together: a prompt without a version bump would silently re-key every
-    // fixture (condition C4, enforced in PR B once a prompt file exists).
-    expect(SYSTEM_PROMPT).toBeUndefined();
-    expect(PROMPT_VERSION).toBe("v0-none");
+  /**
+   * L5-C4: the version identifier is tied to the prompt FILENAME, enforced here.
+   *
+   * REWRITTEN, not supplemented. This test previously asserted `SYSTEM_PROMPT` was `undefined` and
+   * `PROMPT_VERSION` was `"v0-none"`, with a comment forward-referencing this condition to PR B.
+   * That body goes red the moment the version is bumped, so leaving it in place and adding a second
+   * test beside it would have left two competing claims about one constant with one of them
+   * failing. The forward reference is now the implementation.
+   *
+   * What this buys: a prompt file swapped WITHOUT a version bump fails CI instead of silently
+   * re-keying every committed fixture, since `recordingKey` hashes `prompt_version` and would
+   * happily accept `v1` over different bytes.
+   */
+  test("PROMPT_VERSION matches the prompt filename it was generated from (L5-C4)", () => {
+    expect(PROMPT_SOURCE).toBe(`${PROMPT_VERSION}_system.md`);
+  });
+
+  test("the generated text equals the .md on disk, byte for byte (trimmed)", () => {
+    // Read from DISK rather than comparing the generated module to itself, which would be
+    // self-referential and pass no matter how far the two had drifted. Trimmed on both sides
+    // because trimmed is what `composeMessages` puts on the wire.
+    const onDisk = readFileSync(promptPath(), "utf8").trim();
+    expect(SYSTEM_PROMPT).toBe(onDisk);
+  });
+
+  test("the prompt is non-empty, and PROMPT_BYTES / PROMPT_SHA256 describe the wire form", () => {
+    // The digest must be over the TRIMMED text, not the file: the .md ends with a trailing newline
+    // and the wire form does not, so digesting the file would label bytes that are never sent.
+    const wire = readFileSync(promptPath(), "utf8").trim();
+    expect(wire.length).toBeGreaterThan(0);
+    expect(PROMPT_BYTES).toBe(Buffer.byteLength(wire));
+    expect(PROMPT_SHA256).toBe(createHash("sha256").update(wire).digest("hex"));
   });
 });
 
@@ -89,9 +134,33 @@ describe("runTurn drives the composer, not a hand-built array (C2a.ii)", () => {
     );
   });
 
-  test("at v0-none that is exactly the promptless single-user-message array", async () => {
+  /**
+   * L5-C2b, the production half: the request `runTurn` actually drives carries the PRODUCTION
+   * prompt text. (The runner's half of C2b lives in evals/runner/test/composerSeam.test.ts.)
+   *
+   * REPLACES the v0-none assertion that used to sit here, which pinned the promptless
+   * single-user-message array and is false by construction now that a prompt exists.
+   *
+   * ANTI-TAUTOLOGY, and this is the whole point of the test: the expected value is read from
+   * `prompts/v1_system.md` ON DISK, never from a re-imported `SYSTEM_PROMPT`. Comparing the driven
+   * request against the constant it was built from passes even if the load degraded to empty, since
+   * both sides collapse together. That is exactly the defect eval-auditor's Blocking B1 caught in
+   * PR A, where the equality assertions were tautological at `v0-none`.
+   *
+   * Mutation: force `SYSTEM_PROMPT` to `undefined` and this fails; comparing against the import
+   * would not.
+   */
+  test("the driven request carries the PRODUCTION prompt read from disk (L5-C2b)", async () => {
+    const onDisk = readFileSync(promptPath(), "utf8").trim();
     const seen: { messages?: LlmMessage[] } = {};
+
     await runTurn(depsCapturing(seen), { message: "hello" });
-    expect(seen.messages).toEqual([{ role: "user", content: "hello" }]);
+
+    expect(seen.messages).toEqual([
+      { role: "system", content: onDisk },
+      { role: "user", content: "hello" },
+    ]);
+    // Belt and braces on the anti-tautology property: a degraded load would leave this empty.
+    expect(seen.messages?.[0].content.length).toBeGreaterThan(0);
   });
 });

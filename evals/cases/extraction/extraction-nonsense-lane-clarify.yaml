@@ -5,11 +5,26 @@ input:
   message: "Get me freight rates from the moon to USOAK next week."
 expect:
   kind: text
-  # PRODUCT REQUIREMENT (not fitted to recorded output — hazard H7): same rule as the
-  # missing-destination case — a clarification must NAME the field it cannot proceed without. Here
+  # PRODUCT REQUIREMENT (not fitted to recorded output, hazard H7): same rule as the
+  # missing-destination case. A clarification must NAME the field it cannot proceed without. Here
   # the origin is unresolvable ("the moon"), so the answer must identify the origin as the problem;
   # "I need more information" would be useless to a user trying to fix the request.
-  text_contains:
-    - "origin"
+  #
+  # WAS a single "origin" needle, which asserted a VOCABULARY CHOICE rather than the rule: "which
+  # port are you shipping from?" satisfies the requirement completely and failed the needle. With an
+  # extraction floor registered against that, the cheapest way to clear the floor is writing the word
+  # "origin" into the system prompt, which is fitting the prompt to an eval and leaves no
+  # fixture-churn fingerprint (H7). The group below accepts any wording that names the field.
+  #
+  # ALTERNATIVES FIXED BEFORE ANY v1 OUTPUT EXISTS. One line of justification each:
+  #   "origin"          the schema's own field name (searchRatesArgs.origin), the most direct naming
+  #   "shipping from"   the ordinary conversational phrasing of the same field
+  #   "depart"          stem, deliberately chosen to cover departure/departing/departs
+  #   "port of loading" the freight-industry term (POL) for the origin port
+  text_contains_any:
+    - - "origin"
+      - "shipping from"
+      - "depart"
+      - "port of loading"
 recording:
   provider: gemini

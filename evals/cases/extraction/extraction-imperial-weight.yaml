@@ -1,0 +1,34 @@
+id: extraction-imperial-weight
+tier: extraction
+description: "§7 hard class: metric/imperial mix. A weight given in pounds must reach the cargo field in kilograms, rounded to the nearest whole kilogram (rule R3). 1,760 lb is 798.32 kg, so weight_kg pins to 798."
+hard: true
+input:
+  # Post-search state, because weight_kg is a CARGO field and search_rates has no cargo argument.
+  # calculate_quote is the first tool in the flow that carries a weight at all, so it is the only
+  # place an imperial conversion is observable.
+  messages:
+    - role: user
+      content: "Ocean rates CNSHA to USOAK shipping 2026-08-01, please."
+    - role: assistant
+      content: "I found one ocean rate card for CNSHA to USOAK on 2026-08-01: rate_card_id 22222222-2222-4222-8222-222222222222."
+    - role: user
+      content: "Great, quote that card for 1,760 lb of machine parts."
+expect:
+  kind: tool
+  tool: calculate_quote
+  # PRODUCT REQUIREMENT: cargo.weight_kg is kilograms by contract (cargoSchema), so an imperial
+  # figure must be converted before it crosses that boundary, never forwarded as 1760 with the unit
+  # dropped. 1760 lb * 0.45359237 = 798.3226 kg, which rounds to 798.
+  #
+  # The rounding rule (R3) is what makes this pinnable at all: firstSubsetMiss is exact equality
+  # with no tolerance, so without a stated rounding convention 798.32 and 798.3226 and 798 are three
+  # different answers and the case cannot assert a value. R3 is defensible on its own merits (a
+  # freight quote is not priced on fractional kilograms) but it was ALSO adopted for eval
+  # determinism, and ADR-0012 discloses that rather than presenting it as pure product doctrine.
+  args:
+    rate_card_id: "22222222-2222-4222-8222-222222222222"
+    shipment:
+      cargo:
+        weight_kg: 798
+recording:
+  provider: gemini

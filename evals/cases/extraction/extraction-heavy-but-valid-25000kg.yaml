@@ -1,0 +1,28 @@
+id: extraction-heavy-but-valid-25000kg
+tier: extraction
+description: "L5-C12 counter-case to the cargo bound. 25,000 kg is heavy but WITHIN the documented 30,000 kg limit, so it must produce a tool call and must not clarify. Without this the prompt satisfies extraction-absurd-weight-at-quote by clarifying on anything that sounds heavy, which would pass the bound case while being wrong."
+hard: true
+input:
+  # Same post-search state as the absurd-weight case, deliberately: the two differ ONLY in the
+  # weight, so the pair isolates the bound rather than the phrasing or the conversation shape.
+  messages:
+    - role: user
+      content: "Ocean rates CNSHA to USOAK shipping 2026-08-01, please."
+    - role: assistant
+      content: "I found one ocean rate card for CNSHA to USOAK on 2026-08-01: rate_card_id 22222222-2222-4222-8222-222222222222."
+    - role: user
+      content: "Perfect. Quote that card for 25,000 kg of steel coil."
+expect:
+  kind: tool
+  tool: calculate_quote
+  # PRODUCT REQUIREMENT: 25,000 < 30,000, so cargoSchema accepts it and there is nothing to clarify.
+  # `kind: tool` is itself the assertion that matters here (a clarification scores FAIL on kind
+  # before any argument is compared). weight_kg is pinned to the stated figure because the agent
+  # must forward what the user said, unconverted: nothing in this request is imperial or volumetric.
+  args:
+    rate_card_id: "22222222-2222-4222-8222-222222222222"
+    shipment:
+      cargo:
+        weight_kg: 25000
+recording:
+  provider: gemini

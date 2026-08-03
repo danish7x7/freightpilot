@@ -1,0 +1,24 @@
+id: extraction-relative-date-no-reference
+tier: extraction
+description: "§7 hard class: relative dates, the counter-case. With NO reference date stated, a relative expression cannot be resolved and the agent must ask for an exact date rather than invent a 'today'. A silently assumed reference date produces a confidently wrong ship_date, which is worse than a question."
+hard: true
+input:
+  message: "I need ocean rates from CNSHA to USOAK shipping the end of next month."
+expect:
+  kind: text
+  # PRODUCT REQUIREMENT (not fitted to recorded output, hazard H7): the agent has no clock, and rule
+  # R2 forbids putting a date into the prompt (it would change the prompt text daily and re-key
+  # every fixture). So "end of next month" is unresolvable, and the clarification rule applies: name
+  # the field you cannot proceed without. Here that field is the ship date.
+  #
+  # ALTERNATIVES FIXED BEFORE ANY v1 OUTPUT EXISTS. One line of justification each:
+  #   "date"  the schema's own field name (ship_date) and the ordinary word for it
+  #   "when"  the natural-language form of the same question ("when are you shipping?")
+  #
+  # Only two alternatives because the vocabulary for a date genuinely is narrow, unlike the origin
+  # field. A broader group would start accepting answers that do not name the field.
+  text_contains_any:
+    - - "date"
+      - "when"
+recording:
+  provider: gemini

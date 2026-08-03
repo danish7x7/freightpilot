@@ -1,0 +1,20 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "get_booking",
+      "arguments": {
+        "booking_id": "44444444-4444-4444-8444-444444444444"
+      },
+      "thoughtSignature": "EjQKMgERTTIPBT9DkoshE/KGfkG8WgxL1FI2b7oFPU0GVlMrdogNDh4WqwTqGIqlggNqaTiB"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2694,
+    "outputTokens": 53
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

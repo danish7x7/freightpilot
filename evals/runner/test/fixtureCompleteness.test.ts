@@ -67,7 +67,14 @@ describe(`committed fixtures are complete for prompt_version=${PROMPT_VERSION}`,
     const pending = cases.filter((c) => c.pending);
     expect(cases.length).toBeGreaterThan(20);
     expect(driven.length).toBe(cases.length - pending.length);
-    expect(pending).toHaveLength(1);
+    // Two pending: tools-compare-air-vs-ocean-two-calls (runAgentTurn returns the first tool call
+    // only) and extraction-absurd-weight-clarify (retired by PR B as contested, superseded by
+    // extraction-absurd-weight-at-quote). Pinned rather than left open so retiring a case is a
+    // deliberate edit here, not a quiet way to make a failing case stop counting.
+    expect(pending.map((c) => c.id).sort()).toEqual([
+      "extraction-absurd-weight-clarify",
+      "tools-compare-air-vs-ocean-two-calls",
+    ]);
   });
 
   test("every LLM call every driven case makes has a committed recording", async () => {

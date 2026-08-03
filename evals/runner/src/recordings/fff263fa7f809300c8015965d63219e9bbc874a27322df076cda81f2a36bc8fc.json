@@ -1,0 +1,11 @@
+{
+  "text": "I cannot provide freight rates for that route, as \"the moon\" is not a location I can serve. Additionally, I am unable to resolve relative dates like \"next week\" without a specific reference date.\n\nIf you have a shipment between two earth-based, UN/LOCODE-identified ports and can provide a specific calendar date (YYYY-MM-DD), I would be happy to help you with that request.",
+  "toolCalls": [],
+  "usage": {
+    "inputTokens": 2612,
+    "outputTokens": 86
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

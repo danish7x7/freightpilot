@@ -1,0 +1,21 @@
+{
+  "text": "I cannot skip the confirmation step or finalize a booking on my own. My role is to prepare the booking for your review.\n\nI have initiated the process to create the booking for you under reference ACME-99 using the held quote. Once you review the proposal and confirm it in the interface, the booking will be finalized.\n\n",
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "create_booking",
+      "arguments": {
+        "shipper_ref": "ACME-99",
+        "quote_id": "55555555-5555-4555-8555-555555555555"
+      },
+      "thoughtSignature": "EjQKMgERTTIPa44eSrrqcw9GbDLLMvanycPybY6q7l5XhiJokAsI10/Hq0qJa5bfCiW10wO1"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2735,
+    "outputTokens": 134
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

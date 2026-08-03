@@ -134,4 +134,64 @@ describe("OpenAiCompatProvider (replay)", () => {
       kind: "malformed",
     });
   });
+
+  /**
+   * The served model, from the OpenAI-compatible top-level `model`.
+   *
+   * MUTATION: delete `servedModel: root.model` from normalize().
+   *
+   * MEASURED ASYMMETRY, verified 2026-07-31 with one live Groq call: Groq ECHOES the requested id
+   * (`llama-3.3-70b-versatile` sent, the same string returned) rather than resolving it to a
+   * backing version the way Gemini's `modelVersion` does. So on the current chain this field adds
+   * no information beyond `model`. It is read anyway for two reasons: the echo becomes visible in
+   * the bytes as an echo rather than being assumed, and a provider that later starts resolving is
+   * captured without another envelope change. Do NOT read equality here as the field being
+   * pointless; read it as the finding.
+   */
+  test("Groq: servedModel is read from the response body, and today it ECHOES the request", async () => {
+    http.intercept(GROQ_ORIGIN, GROQ_PATH, {
+      status: 200,
+      body: {
+        choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+        model: "llama-3.3-70b-versatile",
+      },
+    });
+
+    const res = await groq().chat(TEXT_REQUEST);
+
+    expect(res.servedModel).toBe("llama-3.3-70b-versatile");
+    // Equal to `model` here, which is the measured Groq behavior rather than a coincidence.
+    expect(res.servedModel).toBe(res.model);
+  });
+
+  test("Groq: a differing body model wins over the configured one (it is read, not assumed)", async () => {
+    // The assertion above cannot distinguish "read from the body" from "copied from cfg.model",
+    // because the two are equal on Groq. This one can: the body says something else, and the
+    // parsed value must follow the body.
+    http.intercept(GROQ_ORIGIN, GROQ_PATH, {
+      status: 200,
+      body: {
+        choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+        model: "llama-3.3-70b-versatile-0125",
+      },
+    });
+
+    const res = await groq().chat(TEXT_REQUEST);
+
+    expect(res.model).toBe("llama-3.3-70b-versatile");
+    expect(res.servedModel).toBe("llama-3.3-70b-versatile-0125");
+    expect(res.servedModel).not.toBe(res.model);
+  });
+
+  test("Groq: a response with no model field leaves servedModel UNDEFINED, never the alias", async () => {
+    // The committed fixtures predate the field. Same rule as Gemini: absence stays absence, because
+    // a fabricated label is less legible than a gap.
+    http.intercept(GROQ_ORIGIN, GROQ_PATH, loadFixture("groq/text.json"));
+
+    const res = await groq().chat(TEXT_REQUEST);
+
+    expect(res.servedModel).toBeUndefined();
+  });
 });

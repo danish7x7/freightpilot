@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "record:fixtures": "RECORD_FIXTURES=1 tsx scripts/record-fixtures.ts",
+    "gen:prompt": "tsx scripts/gen-prompt.ts",
     "gen:api": "openapi-typescript ../../contracts/rates.openapi.yaml -o src/api/rates.gen.ts && openapi-typescript ../../contracts/booking.openapi.yaml -o src/api/booking.gen.ts",
     "db:generate": "drizzle-kit generate",
     "migrate": "node dist/db/migrate.js"

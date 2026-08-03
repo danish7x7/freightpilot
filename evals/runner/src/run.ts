@@ -1,7 +1,9 @@
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { basename, dirname, join } from "node:path";
 import {
   LlmRouter,
+  SYSTEM_PROMPT,
   TokenBucket,
   createProvider,
   loadLlmConfig,
@@ -9,7 +11,8 @@ import {
   type LlmRouter as LlmRouterType,
 } from "./agent.js";
 import { loadCases } from "./loadCases.js";
-import { ReplayProvider, type ReplayMode } from "./replayProvider.js";
+import { readCaptureMeta, writeCaptureMeta } from "./captureMeta.js";
+import { collectServedModels, ReplayProvider, type ReplayMode } from "./replayProvider.js";
 import { scoreCase, type ScoreDeps, type ScoreResult, type Tier } from "./score.js";
 import { buildScorecard, writeScorecard, type Scorecard } from "./scorecard.js";
 import { GATING } from "./gating.js";
@@ -37,6 +40,14 @@ export interface RunOptions {
   writeScorecardFile?: boolean;
   /** Gate config override (the gate-mechanism test injects its own). Defaults to GATING. */
   gating?: Record<Tier, TierGate>;
+  /**
+   * Record-mode live provider override. Defaults to chain[0] built from LLM_CHAIN.
+   *
+   * Exists so the capture-metadata freshness guard can drive record mode without an API key or a
+   * network call. Same discipline as `gating`: an injection point for tests, never a production
+   * path, and it does NOT let the eval path use a different provider than a real capture would.
+   */
+  inner?: LlmProvider;
   /** Date stamp for the scorecard FILENAME only (never the body). Defaults to today (UTC). */
   date?: string;
   log?: (line: string) => void;
@@ -59,7 +70,7 @@ export async function runEvals(opts: RunOptions): Promise<RunResult> {
   // One shared ReplayProvider + bucket composed inside the REAL LlmRouter (guardian Q3). In record
   // mode the bucket paces against the real free-tier rpm; in replay it never blocks (calls are I/O
   // reads). Shared across cases so record mode actually paces the whole capture.
-  const router = buildEvalRouter(opts.mode, opts.recordingsDir);
+  const { router, provider: replayProvider } = buildEvalRouter(opts.mode, opts.recordingsDir, opts.inner);
   const deps: ScoreDeps = { makeRouter: () => router };
 
   // Record mode ONLY: space live capture between cases so a burst of sequential Gemini calls
@@ -76,13 +87,36 @@ export async function runEvals(opts: RunOptions): Promise<RunResult> {
     results.push(await scoreCase(cases[i], deps));
   }
 
-  const scorecard = buildScorecard(results);
+  // Read AFTER the loop so record mode's stamp includes what it just captured. Note it is the whole
+  // committed directory, not this run's consumption set: see collectServedModels on why those two
+  // are equivalent in replay/CI and can diverge during a capture.
+  const servedModels = collectServedModels(opts.recordingsDir);
+  // join(dirname, basename + ".meta.json") rather than string concatenation: a recordingsDir with
+  // a trailing slash would otherwise put the file INSIDE the scanned directory, where
+  // collectServedModels and the orphan check both walk *.json (security-reviewer, Low).
+  const metaPath = join(dirname(opts.recordingsDir), basename(opts.recordingsDir) + ".meta.json");
+  const runDate = opts.date ?? new Date().toISOString().slice(0, 10);
+
+  // Record mode STAMPS the capture date; replay only reads it. L5-C18 wants the date the BYTES were
+  // produced, and only the capture knows that — at replay time "now" is whenever CI ran.
+  // ONLY when something was actually fetched. A re-record over a complete fixture set makes zero
+  // live calls (ReplayProvider short-circuits on an existing key), and stamping a fresh date on
+  // untouched bytes would turn the field that exists to expose staleness into the thing hiding it.
+  if (opts.mode === "record" && replayProvider.liveFetches > 0) {
+    writeCaptureMeta(metaPath, {
+      captured_at: runDate,
+      prompt_version: PROMPT_VERSION,
+      prompt_sha256: createHash("sha256").update(SYSTEM_PROMPT ?? "").digest("hex"),
+      served_models: servedModels,
+    });
+  }
+  const scorecard = buildScorecard(results, servedModels, readCaptureMeta(metaPath)?.captured_at ?? null);
   printReport(scorecard, results, opts.mode, gating, log);
 
   let scorecardPath: string | undefined;
   const shouldWrite = opts.writeScorecardFile ?? Boolean(opts.resultsDir);
   if (shouldWrite && opts.resultsDir) {
-    const date = opts.date ?? new Date().toISOString().slice(0, 10);
+    const date = runDate;
     scorecardPath = writeScorecard(opts.resultsDir, scorecard, date);
     log(`\nscorecard → ${scorecardPath}`);
   }
@@ -150,8 +184,16 @@ function printReport(
   }
 }
 
-function buildEvalRouter(mode: ReplayMode, recordingsDir: string): LlmRouterType {
+function buildEvalRouter(
+  mode: ReplayMode,
+  recordingsDir: string,
+  innerOverride?: LlmProvider,
+): { router: LlmRouterType; provider: ReplayProvider } {
   if (mode === "record") {
+    if (innerOverride) {
+      const provider = new ReplayProvider({ mode, recordingsDir, inner: innerOverride });
+      return { router: new LlmRouter([{ provider, bucket: new TokenBucket({ rpm: 1_000_000 }) }]), provider };
+    }
     const config = loadLlmConfig();
     // Which chain entry to capture from. Captures from the PRIMARY (chain[0], Gemini per ADR-0007)
     // by default — that is the correct provenance for a committed baseline, and the current fixture
@@ -168,11 +210,11 @@ function buildEvalRouter(mode: ReplayMode, recordingsDir: string): LlmRouterType
     // Pace record mode GENTLY from the very first call (capacity=1, not a full-bucket burst) so a
     // bulk capture does not trip the free-tier limiter. EVAL_RECORD_RPM tunes it (default 12/min).
     const rpm = Number(process.env.EVAL_RECORD_RPM ?? 12);
-    return new LlmRouter([{ provider, bucket: new TokenBucket({ rpm, capacity: 1 }) }]);
+    return { router: new LlmRouter([{ provider, bucket: new TokenBucket({ rpm, capacity: 1 }) }]), provider };
   }
   const provider = new ReplayProvider({ mode, recordingsDir });
   // Replay never hits the network; a large rpm means the bucket never paces.
-  return new LlmRouter([{ provider, bucket: new TokenBucket({ rpm: 1_000_000 }) }]);
+  return { router: new LlmRouter([{ provider, bucket: new TokenBucket({ rpm: 1_000_000 }) }]), provider };
 }
 
 // --- CLI ----------------------------------------------------------------------------------

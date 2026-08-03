@@ -59,6 +59,30 @@ describe("gate mechanism (§6)", () => {
     expect(r.exitCode).toBe(0);
   });
 
+  /**
+   * MUTATION: change `buildScorecard(results, collectServedModels(opts.recordingsDir))` in run.ts
+   * to `buildScorecard(results, [])`.
+   *
+   * This is the ONE production call site, and without this test it had no coverage at all: the
+   * adapter parse, the sanitize hop and the scorecard shape were each pinned, and the wiring that
+   * joins them was not. Worse, `scorecard.ts` claimed a required parameter "turns that omission
+   * into a compile error at every call site", but `[]` compiles, so the guarantee named there was
+   * exactly the one not held. (code-reviewer found this by running the mutation the pre-registered
+   * set had skipped.)
+   *
+   * The recording carries a servedModel differing from `model`, so the assertion cannot be
+   * satisfied by reading the configured alias.
+   */
+  test("the scorecard's served_models comes from the recordings the run actually replayed", async () => {
+    const { casesDir, recordingsDir } = fixture("gate-served-models");
+    writeFileSync(
+      join(recordingsDir, `${keyForMessage(MESSAGE)}.json`),
+      JSON.stringify({ ...toolCallResponse("search_rates", VALID), servedModel: "gemini-2.5-flash-preview-09-2025" }) + "\n",
+    );
+    const r = await runEvals({ casesDir, recordingsDir, mode: "replay", gating: TOOLS_GATED, enforceGate: true, writeScorecardFile: false, log: () => {} });
+    expect(r.scorecard.served_models).toEqual(["gemini-2.5-flash-preview-09-2025"]);
+  });
+
   test("a CORRUPTED recording drops the tools tier below floor → exit non-zero", async () => {
     const { casesDir, recordingsDir } = fixture("gate-broken");
     // Corrupted: the model 'answered in text' instead of calling search_rates → tools pass_rate 0.

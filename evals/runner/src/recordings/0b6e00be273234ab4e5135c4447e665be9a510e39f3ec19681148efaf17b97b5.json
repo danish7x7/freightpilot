@@ -1,0 +1,20 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "hold_quote",
+      "arguments": {
+        "quote_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "thoughtSignature": "EjQKMgERTTIPw9dB3xEuqZQnT2Ri3zsjs0ktepgzmRNaOh39AqOl3bHUfQ/z4He+HSRzicvp"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2645,
+    "outputTokens": 53
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

@@ -1,0 +1,23 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "search_rates",
+      "arguments": {
+        "ship_date": "2026-08-20",
+        "mode": "TRUCK",
+        "origin": "USNYC",
+        "dest": "USCHI"
+      },
+      "thoughtSignature": "EjQKMgERTTIP9BA2Simc15TfNfRY0lf6jNEDf2w3b0e4hailWYthVviVeIqiJ4W7HFhZpyPu"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2622,
+    "outputTokens": 48
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

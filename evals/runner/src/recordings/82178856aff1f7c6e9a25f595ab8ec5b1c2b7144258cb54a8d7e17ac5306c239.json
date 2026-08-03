@@ -1,0 +1,32 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "calculate_quote",
+      "arguments": {
+        "shipment": {
+          "origin_code": "CNSHA",
+          "ship_date": "2026-08-01",
+          "dest_code": "USOAK",
+          "mode": "OCEAN",
+          "cargo": {
+            "description": "bottled water",
+            "pallets": 250,
+            "volume_cbm": 62,
+            "weight_kg": 24000
+          }
+        },
+        "rate_card_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "thoughtSignature": "EjQKMgERTTIPZ4DUYYI5rqYTjohy2sUzfrmoF6u2Lv5ffG87OaVoKM/uliUh80/2P4kLVlDq"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2727,
+    "outputTokens": 136
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

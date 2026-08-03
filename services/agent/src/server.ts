@@ -4,6 +4,7 @@ import { createBookingClient } from "./api/booking.js";
 import { createDb } from "./db/client.js";
 import { applyMigrations } from "./db/migrate.js";
 import { buildLlmRouter } from "./llm/index.js";
+import { PROMPT_BYTES, PROMPT_SHA256, PROMPT_SOURCE, PROMPT_VERSION } from "./prompt/systemPrompt.js";
 import { TOOLS, createToolClients } from "./tools/index.js";
 
 const port = Number(process.env.PORT ?? 8082);
@@ -29,6 +30,19 @@ async function main(): Promise<void> {
 
   const app = buildApp({ db, booking, turn });
   const address = await app.listen({ port, host: "0.0.0.0" });
+
+  // L5-C7's boot proof: the packaging claim is verified by BOOTING the container, not by reading
+  // the Dockerfile, so the container has to say what it loaded. The digest is over the trimmed text
+  // that goes on the wire, which is what binds the `prompt_version` LABEL to actual BYTES.
+  // Emitted unconditionally, including in gate-only mode where no LLM chain is configured: the
+  // question "did this image ship the prompt" is independent of whether it can call a model.
+  app.log.info({
+    event: "prompt_loaded",
+    prompt_version: PROMPT_VERSION,
+    source: PROMPT_SOURCE,
+    bytes: PROMPT_BYTES,
+    sha256: PROMPT_SHA256,
+  });
   app.log.info(`agent-service listening on ${address}`);
 
   for (const signal of ["SIGTERM", "SIGINT"] as const) {

@@ -1,0 +1,30 @@
+{
+  "text": null,
+  "toolCalls": [
+    {
+      "id": "call_0",
+      "name": "calculate_quote",
+      "arguments": {
+        "shipment": {
+          "dest_code": "USOAK",
+          "ship_date": "2026-08-01",
+          "mode": "OCEAN",
+          "origin_code": "CNSHA",
+          "cargo": {
+            "weight_kg": 798,
+            "description": "machine parts"
+          }
+        },
+        "rate_card_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "thoughtSignature": "EjQKMgERTTIPscticeK4box2BimdqdBJTwr9BMxOUC/BTnGuQEmriqoUz8QXMBggutSYUTW6"
+    }
+  ],
+  "usage": {
+    "inputTokens": 2708,
+    "outputTokens": 118
+  },
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "servedModel": "gemini-3.1-flash-lite"
+}

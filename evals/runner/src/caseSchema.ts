@@ -55,23 +55,81 @@ const expectTool = z
 /**
  * kind: text — the model must answer/clarify in text (no tool call).
  *
- * `text_contains` is REQUIRED and non-empty (ruling 2). It used to be optional, which meant a case
- * could assert nothing about the answer: `scoreText` looped over an empty list and passed anything,
- * including an empty response. Making it optional-with-a-scorer-guard would leave the omission
- * legal and rely on review to catch it; requiring it here makes the omission structurally
- * impossible for a future case author, which is the half that actually holds.
+ * TWO needle forms, both normalized to the same shape by `toNeedleGroups` below:
  *
- * Each substring must be justified by the PRODUCT requirement the case exists to check — never
- * lifted from what a model happened to say. Fitting substrings to recorded output is unauditable:
- * `recordingKey` ignores the `expect` block, so an expectation edit leaves no fixture-churn
- * fingerprint (hazard H7).
+ *  - `text_contains: string[]`: every substring must appear. Each becomes a ONE-member group.
+ *  - `text_contains_any: string[][]`: each inner array is an OR group, and the groups are ANDed.
+ *
+ * `text_contains_any` exists because a single-substring needle asserts a VOCABULARY CHOICE rather
+ * than the product rule. The origin-clarification case is the worked example: it requires the word
+ * "origin", yet "shipping from" and "a valid departure port" both satisfy the product rule and both
+ * fail that needle. Registering an extraction floor while that is true makes the cheapest way to
+ * clear the floor writing the word "origin" into the prompt, which is prompt-fitting to an eval,
+ * and per hazard H7 it leaves no fixture-churn fingerprint at all because `recordingKey` ignores
+ * the `expect` block entirely.
+ *
+ * Ruling 2's property survives across both forms: a case CANNOT assert nothing. Zero total groups,
+ * any empty group, and any blank alternative are each rejected. Both fields are individually
+ * optional so that either form alone is legal; the total-group-count refinement is what makes
+ * "neither" illegal, and it lives in `caseSchema`'s `superRefine` because `z.discriminatedUnion`
+ * rejects a refined (ZodEffects) member at construction time. Placing it on the UNION (rather than
+ * on this member) would also work and would sit closer to the schema it constrains; the superRefine
+ * was chosen because the tier-versus-kind coherence rules already live there. Note that the schema
+ * is no longer the only thing holding ruling 2: `scoreText` fails closed on zero groups, because
+ * `toNeedleGroups` erased the compile-time guard that used to catch this (see its comment there).
+ *
+ * Each substring is justified by the PRODUCT requirement the case exists to check, never lifted
+ * from what a model happened to say. For an OR group the ALTERNATIVES ARE FIXED BEFORE ANY CAPTURE
+ * RUNS (condition L5-C20's substring-justification discipline, which H7's mitigation rests on).
+ * Reading a recorded output first and then adding the alternative it happens to contain is fitting,
+ * and it is exactly as invisible to fixture-churn analysis as the defect above.
  */
+/**
+ * One alternative. Must contain NON-WHITESPACE, not merely be non-empty.
+ *
+ * `" "` and `"\n"` are substrings of essentially every model answer, so a blank-ish needle asserts
+ * nothing while looking asserted. The OR form raises the stakes: in AND form a degenerate needle
+ * wastes one slot, but inside an OR group it is satisfied by anything and therefore VOIDS every
+ * real alternative beside it. One space in a group of three silently turns the group off.
+ */
+const needle = z.string().refine((s) => s.trim().length > 0, "a needle must contain non-whitespace");
+
 const expectText = z
   .object({
     kind: z.literal("text"),
-    text_contains: z.array(z.string().min(1)).min(1, "a `kind: text` case must assert at least one `text_contains` substring"),
+    text_contains: z
+      .array(needle)
+      .min(1, "`text_contains`, when present, must list at least one substring")
+      .optional(),
+    text_contains_any: z
+      .array(z.array(needle).min(1, "each `text_contains_any` group must list at least one alternative"))
+      .min(1, "`text_contains_any`, when present, must list at least one group")
+      .optional(),
   })
   .strict();
+
+/** One OR group: satisfied when the answer contains ANY of its alternatives. */
+export type NeedleGroup = readonly string[];
+
+export type CaseExpectText = z.infer<typeof expectText>;
+
+/**
+ * Normalize both needle forms into ONE shape, in EXACTLY ONE PLACE.
+ *
+ * `scoreText` takes `NeedleGroup[]` and never the raw expect, so there is a single definition of
+ * what the two fields mean and no second reading of them can drift from this one. A scorer that
+ * branched on which field was set would be two semantics wearing one name.
+ *
+ * Ordering is deterministic: `text_contains` singletons first, in file order, then the
+ * `text_contains_any` groups in file order. Nothing depends on the order (the groups are ANDed),
+ * but a stable order keeps failure messages reproducible across runs.
+ */
+export function toNeedleGroups(expect: CaseExpectText): NeedleGroup[] {
+  const groups: NeedleGroup[] = [];
+  for (const single of expect.text_contains ?? []) groups.push([single]);
+  for (const group of expect.text_contains_any ?? []) groups.push(group);
+  return groups;
+}
 
 /** kind: no_action (safety) — the turn must NOT execute a gated action (§4). */
 const expectNoAction = z
@@ -101,6 +159,26 @@ export const caseSchema = z
      */
     pending: z.boolean().optional(),
     pending_reason: z.string().min(1).optional(),
+    /**
+     * EXTRACTION ONLY. Marks a case as belonging to the HARD half of the extraction tier: the
+     * correct answer requires the agent to transform or to withhold (apply a documented domain
+     * rule, refuse, or name a field it cannot proceed without), rather than to recognize arguments
+     * that are already stated in the message.
+     *
+     * This exists because the pre-registered extraction floor's arithmetic runs on the hard/easy
+     * split (condition L5-C11: the floor must be strictly above the rate the suite scores with
+     * every hard case failing and every easy case passing). Before this flag the split lived only
+     * in ADR-0012's prose, so the two could drift and a reviewer had no way to check the ADR's
+     * table against the case set except by re-deriving it by hand. `evals/runner/test/caseMix.test.ts`
+     * now asserts the counts against `src/preregistration.ts`.
+     *
+     * NOT part of `recordingKey` — it hashes `prompt_version`, `messages` and the tool contract
+     * only (`recordingKey.ts:15`). Stamping this flag on a case therefore changes no fixture key
+     * and does not disturb a frozen capture. It also means the flag inherits hazard H7 exactly as
+     * `expect` does: it can be edited with zero fixture churn, so the classification criterion is
+     * recorded in ADR-0012 §2.2 and the count is pinned by a test rather than left to good faith.
+     */
+    hard: z.boolean().optional(),
     expect: expectSchema.optional(),
     recording: z
       .object({
@@ -111,6 +189,16 @@ export const caseSchema = z
   })
   .strict()
   .superRefine((c, ctx) => {
+    // `hard` means ONE thing: a driven extraction case in the hard half of the floor arithmetic.
+    // Allowing it elsewhere would let a stamped tools or safety case, or a stamped pending case,
+    // read as hard while contributing nothing to the count the floor was registered against, so
+    // the flag would stop being checkable by counting.
+    if (c.hard !== undefined && c.tier !== "extraction") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "`hard` is an extraction-tier classification" });
+    }
+    if (c.hard !== undefined && c.pending) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a pending case is not driven and cannot be classified `hard`" });
+    }
     if (c.pending) {
       if (!c.pending_reason) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a pending case must give a `pending_reason`" });
@@ -120,6 +208,16 @@ export const caseSchema = z
     if (!c.expect) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a non-pending case must set `expect`" });
       return;
+    }
+    // Ruling 2, across BOTH needle forms: a `kind: text` case cannot assert nothing. Setting
+    // neither field leaves `scoreText` iterating zero groups and passing any substantive answer.
+    // This lives here rather than on `expectText` because a discriminated-union member cannot be
+    // a refined schema; the per-field `.min(1)` guards handle the empty-list and empty-group cases.
+    if (c.expect.kind === "text" && toNeedleGroups(c.expect).length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "a `kind: text` case must assert at least one needle group (`text_contains` or `text_contains_any`)",
+      });
     }
     // Tier ↔ expectation coherence: safety is no_action; tools is tool; extraction is tool|text.
     if (c.tier === "safety" && c.expect.kind !== "no_action") {
