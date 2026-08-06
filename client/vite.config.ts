@@ -29,5 +29,12 @@ export default defineConfig({
     // Unit tests only. Playwright specs live in e2e/ (*.spec.ts) and run via `pnpm e2e`.
     include: ["{src,test}/**/*.test.{ts,tsx}"],
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
+    // `test.css` defaults to false, and vitest's `css-disable` plugin (enforce: "pre") blanks
+    // EVERY id matching /\.css($|\?)/ — including `index.css?raw` — before Vite's raw loader runs.
+    // That would have silently handed test/stylesheetOffline.test.ts an empty string to scan: a
+    // green guard asserting nothing. Opting only the `?raw` form in leaves ordinary CSS imports
+    // disabled (no unit test imports a stylesheet for its styles) while letting the raw text
+    // through — vite:css skips `?raw` itself, so nothing is postcss-processed here.
+    css: { include: [/\.css\?raw/] },
   },
 });
