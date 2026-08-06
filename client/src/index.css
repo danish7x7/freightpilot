@@ -1,0 +1,526 @@
+/* FreightPilot — brutalist-utilitarian monospace theme.
+ *
+ * Rules, not fills: the whole system is black lines on near-white. No color, no shadows,
+ * no gradients, no rounded corners. State is carried by weight, border style and words —
+ * never by hue — so the UI reads the same to a monochrome or color-blind viewer.
+ *
+ * Fonts are system/ui-monospace only. No remote at-rule import, no CDN, no webfont dependency —
+ * this stylesheet fetches nothing at runtime. The two named faces are used when the machine
+ * happens to have them; ui-monospace guarantees a designed mono, never Courier, otherwise.
+ *
+ * Enforced by test/stylesheetOffline.test.ts, which explains the reasoning in full. Two rules for
+ * anyone editing this file: that test scans COMMENTS as well as declarations (so the prose here
+ * deliberately avoids spelling the banned at-rule literally), and it bans the at-rule in its local
+ * form too — splitting this file into partials means revisiting the test first.
+ */
+
+:root {
+  --ink: #0a0a0a;
+  --ground: #fafafa;
+  --muted: #6b6b6b;
+  --line: 1px solid var(--ink);
+  --line-thick: 2px solid var(--ink);
+  --gap: 1rem;
+  --max: 68rem;
+
+  --mono:
+    "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    monospace;
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 1rem;
+  line-height: 1.5;
+  font-variant-ligatures: none;
+}
+
+/* Browsers do not inherit font into form controls; this theme is mono EVERYWHERE. */
+input,
+select,
+button,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---- Type scale --------------------------------------------------------------------- */
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 2.5rem 0 var(--gap);
+}
+
+/* h1 is the wordmark — the biggest single thing on the page. */
+h1 {
+  font-size: clamp(2.5rem, 9vw, 4.5rem);
+  letter-spacing: -0.05em;
+  margin-top: 0;
+  text-transform: uppercase;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+h3 {
+  font-size: 1.25rem;
+}
+
+h4 {
+  font-size: 1.0625rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+p {
+  margin: 0 0 var(--gap);
+}
+
+strong {
+  font-weight: 700;
+}
+
+/* ---- Page frame --------------------------------------------------------------------- */
+
+main {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vw, 3rem) var(--gap) 4rem;
+}
+
+/* Rules over fills: sections are separated by a hairline, never a background block. */
+main section {
+  border-top: var(--line);
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+}
+
+main section > :is(h2, h3, h4):first-child {
+  margin-top: 0;
+}
+
+/* ---- Form controls ------------------------------------------------------------------ */
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+input,
+select {
+  background: var(--ground);
+  border: var(--line);
+  border-radius: 0;
+  padding: 0.5rem 0.625rem;
+  font-size: 1rem;
+  letter-spacing: 0;
+  text-transform: none;
+  min-width: 0;
+  width: 100%;
+}
+
+select {
+  appearance: none;
+  padding-right: 2rem;
+  /* A drawn caret, not an image asset — keeps the bundle self-contained. */
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+    linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.05rem) 55%,
+    calc(100% - 0.7rem) 55%;
+  background-size:
+    0.35rem 0.35rem,
+    0.35rem 0.35rem;
+  background-repeat: no-repeat;
+}
+
+/* Visible focus with zero color: a thick square ring, offset so it never hides the border. */
+:is(input, select, button, a, [tabindex]):focus-visible {
+  outline: var(--line-thick);
+  outline-offset: 2px;
+}
+
+input::placeholder {
+  color: var(--muted);
+}
+
+/* ---- Buttons: one shared style ------------------------------------------------------ */
+
+button {
+  background: var(--ground);
+  color: var(--ink);
+  border: var(--line);
+  border-radius: 0;
+  padding: 0.5rem 1rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+button:disabled {
+  color: var(--muted);
+  border-color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* Adjacent buttons must never fuse into one segmented control. BookingDetailView renders
+   "Confirm booking" and "Cancel booking" as siblings with no whitespace between them; two
+   identical 1px boxes sharing a seam is a mis-click waiting to happen, and these two drive
+   opposite state-machine transitions (CONFIRMED vs CANCELLED). */
+button + button {
+  margin-left: 0.75rem;
+}
+
+/* ---- The rate search form ----------------------------------------------------------- */
+
+form[aria-label="Rate search"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--gap);
+  align-items: end;
+  border-top: var(--line);
+  padding-top: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+/* The submit sits on its own full-width row, under the grid of fields. */
+form[aria-label="Rate search"] button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding-inline: 2rem;
+}
+
+/* ---- Tables: a spec sheet, not a browser default ------------------------------------ */
+
+/* Narrow viewports scroll the table rather than squashing it. The wrapper already exists
+   in QuoteList; no markup was added for this. */
+/* The negative margin cancels the padding, so the wrapper stays flush with the rest of the
+   measure while still leaving room for the sort <select>'s offset focus ring — `overflow-x`
+   also computes `overflow-y: auto`, which would otherwise clip it. */
+div:has(> table) {
+  overflow-x: auto;
+  padding: 4px 0 4px 4px;
+  margin-left: -4px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--gap) 0;
+  font-variant-numeric: tabular-nums;
+}
+
+th {
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+thead th {
+  border-bottom: var(--line-thick);
+  padding: 0.5rem 0.75rem;
+}
+
+td,
+tfoot th {
+  border-bottom: var(--line);
+  padding: 0.625rem 0.75rem;
+  vertical-align: baseline;
+}
+
+/* The total row: the label and the money it labels must read at the same size. */
+tfoot th,
+tfoot td {
+  border-top: var(--line-thick);
+  border-bottom: none;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  padding: 0.625rem 0.75rem;
+}
+
+/* Selection marked by weight and a rule — no fill, no color. */
+tr[aria-selected="true"] > * {
+  font-weight: 700;
+  border-bottom-color: var(--ink);
+}
+
+tr[aria-selected="true"] > :first-child {
+  border-left: var(--line-thick);
+  padding-left: calc(0.75rem - 2px);
+}
+
+/* Left-align the sort control above the table instead of stretching it edge to edge. */
+div:has(> table) > label {
+  max-width: 16rem;
+}
+
+/* ---- Definition lists: a receipt / manifest ----------------------------------------- */
+
+dl {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) 1fr;
+  gap: 0.375rem var(--gap);
+  margin: var(--gap) 0;
+}
+
+dt {
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  align-self: baseline;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Timeline / lists --------------------------------------------------------------- */
+
+section[aria-label="Booking timeline"] ol {
+  list-style: none;
+  margin: 0 0 var(--gap);
+  padding: 0;
+}
+
+section[aria-label="Booking timeline"] li {
+  border-bottom: var(--line);
+  padding: 0.5rem 0;
+}
+
+p[role="note"] {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+/* ---- Status / alert text ------------------------------------------------------------ */
+
+p[role="alert"] {
+  border-left: 4px double var(--ink);
+  padding-left: 0.75rem;
+  font-weight: 700;
+}
+
+p[role="status"] {
+  border-left: 2px dashed var(--ink);
+  padding-left: 0.75rem;
+}
+
+code {
+  font-family: inherit;
+  border: var(--line);
+  padding: 0.0625rem 0.3125rem;
+  white-space: nowrap;
+}
+
+/* ---- The agent panel ---------------------------------------------------------------- */
+
+/* Full-bleed thick rule marks the boundary between the manual flow and the agent surface;
+   the panel's own content stays on the same --max measure as <main>. */
+.chat-panel {
+  border-top: var(--line-thick);
+  margin-top: 4rem;
+  padding: 3rem var(--gap) 4rem;
+}
+
+/* <main> is border-box, so its 68rem includes 1rem of padding per side — matching that 66rem
+   content measure here keeps the two surfaces on the same left/right edge. */
+.chat-panel > * {
+  max-width: calc(var(--max) - 2 * var(--gap));
+  margin-inline: auto;
+}
+
+/* `margin: 0 auto` NOT `margin: 0` — the shorthand would reset the margin-inline: auto set
+   by `.chat-panel > *` above and knock the log (and the confirmation card inside it) out of
+   alignment with the rest of the panel on wide viewports. */
+.chat-log {
+  list-style: none;
+  margin: 0 auto 1.5rem;
+  padding: 0;
+  border-top: var(--line);
+}
+
+.chat-entry {
+  border-bottom: var(--line);
+  padding: 0.875rem 0 0.875rem 0.875rem;
+}
+
+.chat-entry > p:last-child {
+  margin-bottom: 0;
+}
+
+/* Speaker is carried by weight and a rule, never by color. */
+.chat-user {
+  border-left: var(--line-thick);
+  font-weight: 700;
+}
+
+.chat-text,
+.chat-tool,
+.chat-form_fallback {
+  border-left: var(--line);
+}
+
+.chat-tool {
+  color: var(--muted);
+}
+
+.chat-tool strong,
+.chat-tool code {
+  color: var(--ink);
+}
+
+/* The proposal hosts the confirmation card, which draws its own frame. */
+.chat-proposal {
+  border-left: none;
+  padding-left: 0;
+}
+
+.chat-panel form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  border-top: var(--line);
+  padding-top: 1.5rem;
+}
+
+.chat-panel form label {
+  flex: 1;
+}
+
+.chat-panel form button {
+  flex: none;
+  padding-inline: 1.75rem;
+}
+
+/* ---- The confirmation card — the decision point ------------------------------------- */
+
+.confirmation-card {
+  border: var(--line-thick);
+  padding: 1.5rem;
+  margin: var(--gap) 0;
+}
+
+.confirmation-card > :first-child {
+  margin-top: 0;
+}
+
+.confirmation-card dl {
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  border-top: var(--line);
+  border-bottom: var(--line);
+  padding: var(--gap) 0;
+}
+
+/* THE action: full-width and inverted by default, so it is unmistakably the one thing to click. */
+.confirmation-card button {
+  display: block;
+  width: 100%;
+  background: var(--ink);
+  color: var(--ground);
+  border-color: var(--ink);
+  padding-block: 0.875rem;
+  font-size: 1rem;
+}
+
+.confirmation-card button:hover:not(:disabled) {
+  background: var(--ground);
+  color: var(--ink);
+}
+
+/* Disabled during "Confirming…" — dimmed to --muted, never invisible. */
+.confirmation-card button:disabled {
+  background: var(--ground);
+  color: var(--muted);
+  border-color: var(--muted);
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin: 0.5rem 0 0;
+}
+
+/* Outcome state on the left border + a word prefix. No color anywhere: the <strong> title
+   already says what happened; the border and prefix are the at-a-glance signal. */
+/* Thicker than the card's own 2px frame on purpose — at --line-thick it would be byte-identical
+   to the neutral base and the success state would carry no border signal at all. */
+.outcome-success {
+  border-left: 6px solid var(--ink);
+}
+
+.outcome-warn {
+  border-left: 2px dashed var(--ink);
+}
+
+.outcome-error {
+  border-left: 4px double var(--ink);
+}
+
+.confirmation-card :is(p[role="alert"], p[role="status"]) {
+  border-left: none;
+  padding-left: 0;
+  font-weight: inherit;
+}
+
+.outcome-success strong::before {
+  content: "OK / ";
+}
+
+.outcome-warn strong::before {
+  content: "… / ";
+}
+
+.outcome-error strong::before {
+  content: "ERR / ";
+}
+
+/* ---- Utilities ---------------------------------------------------------------------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
